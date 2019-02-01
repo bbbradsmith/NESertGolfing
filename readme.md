@@ -83,7 +83,7 @@ used as part of the build. See the file list below for details.
 - *layer2.png* - Font set tiles, monochrome.
 - *sprite.png* - Sprite tiles, 3 colour.
 - *layers.chr* - Compiled from *layer1.png* and *layer2.png*.
-- *sprite.chr* - Compiled from *layer1.png* and *layer2.png*.
+- *sprite.chr* - Compiled from *sprite.png*.
 - *sounds.ftm* - FamiTracker prototype of the sound effects used in the game.
 - *splash.ase* - Aseprite animation prototype of the ball splashing into the sea.
 - *temp/dgolf.nes* - Provided game ROM, already built.
