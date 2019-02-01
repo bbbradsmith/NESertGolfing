@@ -1,8 +1,8 @@
 # NESert Golfing
 
-A 2D golf game for the NES, directly inspired by [https://captaingames.itch.io/desert-golfing](Desert Golfing).
+A 2D golf game for the NES, directly inspired by [Desert Golfing](https://captaingames.itch.io/desert-golfing).
 
-By Brad Smith, 2019.
+Brad Smith, 2019.
 
 Official website:
 https://rainwarrior.itch.io/nesert-golfing
@@ -10,7 +10,7 @@ https://rainwarrior.itch.io/nesert-golfing
 Author's website:
 http://rainwarrior.ca
 
-# License
+## License
 
 This source code is provided under the Creative Commons Attribution license. (CC BY 4.0)
 
@@ -21,7 +21,7 @@ This approximately means that you are free to reuse this source code for your ow
 provided that you include an attribution to me (Brad Smith) in documentation and
 accessible credits for the work it is used in.
 
-# Prerequisites
+## Prerequisites
 
 The only required tool for building this game is CC65:
 https://cc65.github.io/
@@ -30,15 +30,15 @@ The specific version of CC65 used:
 **cc65 V2.17 - Git 80a43d7**
 
 Optional:
-- [https://www.python.org/](Python 3.7) - Used for some included build scripts.
-- [https://www.aseprite.org/](Aseprite) - Used to prepare animated sprites.
-- [http://famitracker.com/](FamiTracker) - Used to prepare sounds.
+- [Python 3.7](https://www.python.org/) - Used for some included build scripts.
+- [Aseprite](https://www.aseprite.org/) - Used to prototype animated sprites.
+- [FamiTracker](http://famitracker.com/) - Used to prototype sounds.
 
 The provided build script (*build.bat*) is a Windows batch file.
 If you wish to build this program on another platform,
 you will have to recreate a similar script for yourself in a suitable format.
 
-# Guide
+## Guide
 
 Place CC65 in a *cc65/* directory in the root of this project.
 The CC65 toolchain executables should be in *cc65/bin/*.
@@ -69,7 +69,7 @@ Read the comments in *build_runtime.bat* for details.
 A few other files have been included that aren't directly
 used as part of the build. See the file list below for details.
 
-# Files
+## Files
 
 - *build.bat* - Batch file to build *temp/dgolf.nes*.
 - *build_runtime.bat* - Batch file to rebuild *temp/runtime.lib*.
