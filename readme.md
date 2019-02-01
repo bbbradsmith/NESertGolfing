@@ -30,6 +30,8 @@ The specific version of CC65 used:
 **cc65 V2.17 - Git 80a43d7**
 
 Optional:
+- [Mesen](https://www.mesen.ca/) - An NES emulator and debugger.
+- [FCEUX](http://www.fceux.com/) - An alternative NES emulator and debugger.
 - [Python 3.7](https://www.python.org/) - Used for some included build scripts.
 - [Aseprite](https://www.aseprite.org/) - Used to prototype animated sprites.
 - [FamiTracker](http://famitracker.com/) - Used to prototype sounds.
@@ -51,6 +53,9 @@ and some other routines that needed to be written
 directly in more efficient assembly.
 
 The output NES ROM *temp/dgolf.nes* is built by running *build.bat*.
+
+The build will also create a debug symbols file *temp/dgolf.deb*,
+which can be used with the Mesen emulator.
 
 Some additional assembly code is contained in *blend.s*.
 I made this separately as a generic routine to blend between any
