@@ -5,7 +5,7 @@
 //
 
 const char rom_version[] = " ################  "
-	"NESert Golfing version 1.1 by Brad Smith, 2019"
+	"NESert Golfing version 1.2 by Brad Smith, 2019"
 	"  ################ ";
 
 // for debugging performance
@@ -348,8 +348,8 @@ const uint8 SFX_STROKE[] = { SFX_BEGIN,
 	SFX(0xC,0x31),                SFX_FRAME, SFX_END };
 
 const uint8 SFX_FLAG[] = { SFX_BEGIN,
-	SFX(0x0,0xB2), SFX(0x2,0xAB), SFX(0x3,0x01), SFX_FRAME, SFX_FRAME,
-	SFX(0x0,0xB3), SFX(0x2,0x52),                SFX_FRAME, SFX_FRAME,
+	SFX(0x0,0xB2), SFX(0x2,0x93), SFX(0x3,0x01), SFX_FRAME, SFX_FRAME,
+	SFX(0x0,0xB3), SFX(0x2,0x3F),                SFX_FRAME, SFX_FRAME,
 	SFX(0x0,0xB4), SFX(0x2,0xEF), SFX(0x3,0x00), SFX_FRAME, SFX_FRAME,
 	SFX(0x0,0xB5), SFX(0x2,0xBD),                SFX_FRAME, SFX_FRAME,
 	SFX(0x0,0xB4), SFX(0x2,0x9F),                SFX_FRAME, SFX_FRAME,
