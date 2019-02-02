@@ -1,0 +1,7 @@
+cc65/
+libsrc/
+temp/runtime/
+temp/*.o
+temp/*.s
+temp/*.dbg
+temp/*.map

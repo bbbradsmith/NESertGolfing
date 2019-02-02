@@ -5,7 +5,7 @@
 //
 
 const char rom_version[] = " ################  "
-	"NESert Golfing version 1.0 by Brad Smith, 2019"
+	"NESert Golfing version 1.1 by Brad Smith, 2019"
 	"  ################ ";
 
 // for debugging performance
@@ -270,6 +270,7 @@ uint8 rollout; // visual timeout (if ball is in same place for too long)
 uint8 valley;
 uint8 old_lip[2];
 uint8 first_stroke;
+uint8 next_player;
 
 #pragma bss-name (pop)
 
@@ -1253,6 +1254,7 @@ void title()
 	ball_s = 0;
 	splash_s = 0;
 	player = 0;
+	next_player = 0;
 	swinging = 0;
 	status_w = 0;
 	ring_glow = 0;
@@ -1568,11 +1570,20 @@ void hole_play()
 		status_bar_fade_in();
 
 	// 5. play hole
-	player = 0;
+	player = next_player;
+	next_player = (next_player + 1) % players;
 	cleared = 0;
 	for (i=0; i<4; ++i)
 		if (i >= players) cleared |= (1 << i);
 	ball_draw_setup();
+
+	// play sound to indicate current player
+	if (players > 1)
+	{
+		hole_draw(); frames(2);
+		sound_play(SFX_PROMPTS[player]);
+	}
+
 
 	while (cleared < 0x10)
 	{
@@ -1581,6 +1592,7 @@ void hole_play()
 		{
 			if (players > 1) // extra time to keep prompt jingle from cutting rudely
 			{
+				hole_draw(); frames(2);
 				hole_draw(); frames(2);
 				hole_draw(); frames(2);
 				hole_draw(); frames(2);
