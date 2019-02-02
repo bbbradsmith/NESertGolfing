@@ -5,7 +5,7 @@
 //
 
 const char rom_version[] = " ################  "
-	"NESert Golfing version 1.2 by Brad Smith, 2019"
+	"NESert Golfing version 1.3 by Brad Smith, 2019"
 	"  ################ ";
 
 // for debugging performance
@@ -1570,8 +1570,27 @@ void hole_play()
 		status_bar_fade_in();
 
 	// 5. play hole
+
+	// find leading player (after the one who played first last)
+	for (t=1; t<4; ++t)
+	{
+		j = (next_player + t) & 3;
+		if (j >= players) continue;
+		for (i = 0; i<5; ++i)
+		{
+			k = strokes[(j*5)+4-i];
+			l = strokes[(next_player)*5+4-i];
+			if (k > l) break;
+			if (k < l)
+			{
+				next_player = j;
+				break;
+			}
+		}
+	}
 	player = next_player;
-	next_player = (next_player + 1) % players;
+	next_player = (next_player + 1) % players; // favour the next one if tied to keep it cycling
+
 	cleared = 0;
 	for (i=0; i<4; ++i)
 		if (i >= players) cleared |= (1 << i);
