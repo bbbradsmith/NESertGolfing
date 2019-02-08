@@ -1,7 +1,7 @@
 @REM Generates temp\runtime.lib
 @REM
 @REM cc65\ should contain latest cc65 build (cc65\bin)
-@REM librsc\ should contain latest cc65 libsrc folder
+@REM libsrc\ should contain latest cc65 libsrc folder
 @REM
 @REM Download CC65 source here:
 @REM https://github.com/cc65/cc65
@@ -27,14 +27,14 @@ del temp\runtime\stkchk.o
 for %%X in (temp\runtime\*.o) do cc65\bin\ar65.exe a temp\runtime.lib %%X
 @echo.
 @echo.
-@echo temp/runtime.lib build complete, review the log above in case of errors.
+@echo temp\runtime.lib build complete, review the log above in case of errors.
 @goto end
 
 :needlibsrc
 @echo.
 @echo.
-@echo temp/runtime.lib not rebuilt!
-@echo Download CC65 source and place libsrc/ folder here.
+@echo temp\runtime.lib not rebuilt!
+@echo Download CC65 source and place libsrc\ folder here.
 @echo Edit this batch file for more information.
 
 :end
