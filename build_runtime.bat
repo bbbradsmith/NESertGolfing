@@ -1,7 +1,7 @@
 @REM Generates temp\runtime.lib
 @REM
 @REM cc65\ should contain latest cc65 build (cc65\bin)
-@REM librsc\ should contain latest cc65 libsrc folder
+@REM libsrc\ should contain latest cc65 libsrc folder
 @REM
 @REM contents:
 @REM   libsrc\runtime
