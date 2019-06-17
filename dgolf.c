@@ -577,10 +577,10 @@ void sprite_end()
 
 void sprite_add(uint8 tile, uint8 x, uint8 y, uint8 attrib)
 {
-	oam[(uint8)(oam_pos+2)] = attrib;
-	oam[(uint8)(oam_pos+0)] = (uint8)(y-1);
-	oam[(uint8)(oam_pos+3)] = x;
-	oam[(uint8)(oam_pos+1)] = tile;
+	(oam+2)[oam_pos] = attrib;
+	(oam+0)[oam_pos] = (uint8)(y-1);
+	(oam+3)[oam_pos] = x;
+	(oam+1)[oam_pos] = tile;
 	oam_pos += 4;
 }
 
