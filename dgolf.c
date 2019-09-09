@@ -161,6 +161,10 @@ extern volatile uint16 balls_wx[7]; // word access to balls_x+1 (0,2,4,6), low,h
 extern uint8  balls_y[4];
 extern sint16 norm_x;
 extern sint16 norm_y;
+// note: while "volatile" is semantically important because of the type-punned aliases for balls_x
+// it was actually a bad idea, because in cc65 it ends up disabling all optimizations in any function
+// that uses volatile variables. In hindsight it would have been better to do this without the
+// alias access.
 
 #pragma zpsym("floor_column")
 #pragma zpsym("weather_tile")

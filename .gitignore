@@ -5,3 +5,4 @@ temp/*.o
 temp/*.s
 temp/*.dbg
 temp/*.map
+*.opt
