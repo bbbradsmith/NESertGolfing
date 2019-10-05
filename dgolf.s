@@ -13,6 +13,8 @@
 .segment "ZEROPAGE"
 _ptr:          .res 2 ; shared pointer for C interface
 _seed:         .res 4 ; random number seed (only using low 3 bytes)
+_seedw:        .res 4 ; dependent seed for wind changes only
+_seedf:        .res 4 ; independent seed for things that can still be random (e.g. rain/snow animation)
 ppu_post_mode: .res 1
 sound_ptr:     .res 2
 _input:        .res 16
@@ -107,6 +109,8 @@ _oam: .res 256
 
 .exportzp _ptr
 .exportzp _seed
+.exportzp _seedw
+.exportzp _seedf
 .exportzp _input, _gamepad, _mouse1, _mouse2, _mouse3
 .exportzp _i,_j,_k,_l
 .exportzp _mx,_nx,_ox,_px
@@ -517,10 +521,10 @@ spawn:
 	sta _oam + 1, Y
 	lda _weather_attribute
 	sta _oam + 2, Y
-	jsr _prng ; X
+	jsr _prngf ; X
 	sta _oam + 3, Y
 	; set time until next spawn
-	jsr _prng
+	jsr _prngf
 	and _weather_rate_mask
 	clc
 	adc _weather_rate_min
@@ -549,7 +553,7 @@ animate_loop:
 	sta _oam + 0, X
 	; wind
 	:
-		jsr prng1
+		jsr prngf1
 		cmp _weather_wind_p
 		bcs :+
 			lda _oam + 3, X
@@ -868,6 +872,10 @@ lsr4: ; logical shift right 4 bits
 
 .export _prng
 .export _prng1
+.export _prngw
+.export _prngw1
+.export _prngf
+.export _prngf1
 .export _mouse_sense
 .export _input_setup
 .export _input_poll
@@ -902,6 +910,66 @@ prng1:
 	eor #$1B
 :
 	sta _seed+0
+	rts
+
+_prngw:
+	ldx #8
+prngwx:
+	lda _seedw+0
+:
+	asl
+	rol _seedw+1
+	rol _seedw+2
+	bcc :+
+	eor #$1B
+:
+	dex
+	bne :--
+	sta _seedw+0
+	;ldx #0 ; clear high bits of return value
+	rts
+
+_prngw1:
+	ldx #0
+prngw1:
+	lda _seedw+0
+	asl
+	rol _seedw+1
+	rol _seedw+2
+	bcc :+
+	eor #$1B
+:
+	sta _seedw+0
+	rts
+
+_prngf:
+	ldx #8
+prngfx:
+	lda _seedf+0
+:
+	asl
+	rol _seedf+1
+	rol _seedf+2
+	bcc :+
+	eor #$1B
+:
+	dex
+	bne :--
+	sta _seedf+0
+	;ldx #0 ; clear high bits of return value
+	rts
+
+_prngf1:
+	ldx #0
+prngf1:
+	lda _seedf+0
+	asl
+	rol _seedf+1
+	rol _seedf+2
+	bcc :+
+	eor #$1B
+:
+	sta _seedf+0
 	rts
 
 input_poll_raw:

@@ -44,11 +44,15 @@ typedef   signed long  int sint32;
 
 extern uint8* ptr;
 extern uint32 seed; // 24-bit random seed, don't set to 0
+extern uint32 seedw;
+extern uint32 seedf;
 extern uint8 i, j, k, l;
 extern uint16 mx,nx,ox,px;
 extern sint16 ux,vx;
 #pragma zpsym("ptr")
 #pragma zpsym("seed")
+#pragma zpsym("seedw")
+#pragma zpsym("seedf")
 #pragma zpsym("i")
 #pragma zpsym("j")
 #pragma zpsym("k")
@@ -75,6 +79,10 @@ extern sint8 mouse3;
 
 extern uint8 prng(); // 8-bit random value
 extern uint8 prng1(); // "fast" random value, only bit 0 is truly random (bits 1-7 have increasing entropy)
+extern uint8 prngw(); // dependent random generator for ongoing wind adjustment only
+extern uint8 prngw1();
+extern uint8 prngf(); // independent random generator for things that should still be random
+extern uint8 prngf1();
 extern void mouse_sense(); // cycles sensitivity setting (doesn't work on Hyperkin clone)
 extern void input_setup();
 extern void input_poll();
@@ -794,9 +802,9 @@ void weather_fade_automask()
 
 void weather_wind_random()
 {
-	weather_wind_fade_dir = 1 - ((prng1() & 1) * 2); // 1 or -1, wind direction
-	weather_wind_fade_p = prng(); // wind strength
-	weather_wind_timeout = ((prng() & 15) + 32) * 64; // 30-50 seconds before wind changes
+	weather_wind_fade_dir = 1 - ((prngw1() & 1) * 2); // 1 or -1, wind direction
+	weather_wind_fade_p = prngw(); // wind strength
+	weather_wind_timeout = ((prngw() & 15) + 32) * 64; // 30-50 seconds before wind changes
 }
 
 void weather_fade()
@@ -848,6 +856,10 @@ void weather_fade()
 
 void weather_attribute_set()
 {
+	seedw = seed; // TE: starting wind for a weather zone is always dependent on hole seed,
+	// if a player spends a long time on a hole the wind needs to keep changing, but
+	// it has to resync at the next weather zone transition
+
 	// sets speed and palette via whether tile is rain or snow
 	// the unused bits of the OAM attribute byte are used to control particle fall speed
 	weather_attribute = (weather_tile == 0x38) ? ((4<<2)|3) : ((1<<2)|2);
@@ -1100,7 +1112,8 @@ void title()
 
 	// menu
 	ppu_latch(0x23C0 + 0 + (12*2));
-	ppu_fill(attribute(1,1,1,1),24);
+	ppu_fill(attribute(1,1,1,1),16);
+	ppu_fill(attribute(1,1,2,2),8);
 	ppu_fill(attribute(2,2,2,2),16);
 	ppu_text(title_text, 0x2000 + 5 + (13 * 32));
 
@@ -1182,7 +1195,7 @@ void title()
 			}
 		}
 
-		prng(); // build up entropy
+		//prng(); // build up entropy, not desired for TE
 		++frame_count;
 		
 		// colour cycle the cursor
@@ -1642,7 +1655,7 @@ void hole_play()
 		do
 		{
 			input_poll();
-			prng1(); // entropy
+			//prng1(); // entropy, not desired for TE
 			hole_draw();
 			frame();
 			#if HOLE_SKIP
@@ -1696,7 +1709,7 @@ void hole_play()
 			if (swing_y >  SWING_MAX) swing_y =  SWING_MAX;
 			if (swing_y < -SWING_MAX) swing_y = -SWING_MAX;
 			
-			prng1(); // entropy
+			//prng1(); // entropy, not desired for TE
 			hole_draw();
 			frame();
 		}
@@ -1893,7 +1906,9 @@ void hole_play()
 
 		collide_skip:
 			// apply wind only if not colliding or on ground
-			if (weather_rate_min && (prng1() < weather_wind_p))
+			// TE: uses "free" prngf because this is supposed to be a statistical chance of wind curving the ball,
+			//     and prngw is only for deciding wind patterns at a higher level
+			if (weather_rate_min && (prngf1() < weather_wind_p))
 				ball_vx += weather_wind_dir * WIND;
 		
 		collide_done:
@@ -2061,7 +2076,9 @@ void main()
 {
 	//fmult_test();
 
-	seed = 0x00654321; // default seed: yellow, day (was the default seed used for all-zero RAM)
+	seed = 0x00456321; // yellow, day
+	seedw = seed; // weather PRNG will be reloaded from main PRNG at sync points
+	seedf = seed; // any nonzero value is find for free PRNG
 
 	input_setup();
 
