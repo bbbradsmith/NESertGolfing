@@ -6,5 +6,6 @@ temp/*.s
 temp/*.dbg
 temp/*.map
 temp/*.lst
+temp/*.nes
 *.opt
 cmd.exe.lnk
