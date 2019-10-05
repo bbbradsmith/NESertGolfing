@@ -1694,13 +1694,13 @@ reset:
 	:
 		bit $2002
 		bpl :-
-	; preserve PRNG seed (keeps randomness across reset)
-	lda _seed+2
-	pha
-	lda _seed+1
-	pha
-	lda _seed+0
-	pha
+	; preserve PRNG seed (keeps randomness across reset) disabled for Tournament Edition
+	;lda _seed+2
+	;pha
+	;lda _seed+1
+	;pha
+	;lda _seed+0
+	;pha
 	lda #0 ; clear RAM
 	tax
 	:
@@ -1715,13 +1715,13 @@ reset:
 		inx
 		bne :-
 	; restore PRNG seed
-	pla
-	sta _seed+0
-	pla
-	sta _seed+1
-	pla
-	ora #$80 ; make sure at least 1 bit of seed is set
-	sta _seed+2
+	;pla
+	;sta _seed+0
+	;pla
+	;sta _seed+1
+	;pla
+	;ora #$80 ; make sure at least 1 bit of seed is set
+	;sta _seed+2
 	; clear stack, separately wipe OAM
 	lda #0
 	:

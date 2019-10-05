@@ -1,6 +1,15 @@
-# NESert Golfing
+# NESert Golfing Tournament Edition
 
-A 2D golf game for the NES, directly inspired by [Desert Golfing](https://captaingames.itch.io/desert-golfing).
+**THIS IS A WORK IN PROGRESS. NOT READY FOR USE YET.**
+
+This is an alternate version of
+[NESert Golfing](https://github.com/bbbradsmith/NESertGolfing)
+intended for competition. All of the random hold generation and weather
+patterns have been replaced with an explicit seed that you can select
+from the title screen.
+
+This allows a fair contest between players who are using separate consoles,
+and also facilitates speedrun play that compares time rather than score.
 
 Brad Smith, 2019.
 

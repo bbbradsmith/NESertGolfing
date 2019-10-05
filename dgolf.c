@@ -1,11 +1,12 @@
 //
 // dgolf.c
 // NESert Golfing, by Brad Smith 2019
+// Tournament Edition
 // http://rainwarrior.ca
 //
 
 const char rom_version[] = " ################  "
-	"NESert Golfing version 1.3 by Brad Smith, 2019"
+	"NESert Golfing Tournament Edidtion version 1.3 by Brad Smith, 2019"
 	"  ################ ";
 
 // for debugging performance
@@ -930,6 +931,10 @@ const char title_text[] =
 	"\n"
 	"How many?   1  2  3  4\n"
 	"\n"
+	"     Seed: ......\n" // TODO
+	"\n"
+	"      Holes: ...\n" // TODO
+	"\n"
 	"         Help";
 
 #define MOUSE_STEADY_TIME 24
@@ -1005,6 +1010,17 @@ void help()
 	return;
 }
 
+const uint8 TITLE_NMT[16*8] = {
+	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x00, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+	0x20, 0x21, 0x22, 0x33, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
+	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x00, 0x3E, 0x3F,
+	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x00, 0x4E, 0x4F,
+	0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F,
+	0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F,
+	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F,
+	0x19, 0x23, 0x3D, 0x4D, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+};
+
 void title()
 {
 	cls();
@@ -1075,22 +1091,18 @@ void title()
 	ppu_apply_direction(0);
 
 	// title
-	i = 16;
-	for (j=0; j<7; ++j)
+	i = 0;
+	for (j=0; j<8; ++j)
 	{
 		ppu_latch(0x2000 + 8 + ((4+j) * 32));
-		for (k=0; k<16; ++k) { ppu_write(i); ++i; }
+		for (k=0; k<16; ++k) { ppu_write(TITLE_NMT[i]); ++i; }
 	}
-	ppu_latch(0x2000 + (8+13) + ((4+7) * 32));
-	ppu_write(13);
-	ppu_write(14);
-	ppu_write(15);
 
 	// menu
 	ppu_latch(0x23C0 + 0 + (12*2));
-	ppu_fill(attribute(1,1,1,1),16);
-	ppu_fill(attribute(2,2,2,2),24);
-	ppu_text(title_text, 0x2000 + 5 + (15 * 32));
+	ppu_fill(attribute(1,1,1,1),24);
+	ppu_fill(attribute(2,2,2,2),16);
+	ppu_text(title_text, 0x2000 + 5 + (13 * 32));
 
 	// help
 	ppu_latch(0x27C0 + 0 + (0*2));
@@ -1107,9 +1119,9 @@ void title()
 
 	while (1)
 	{
-		#define MENU_Y0 (15*8)
-		#define MENU_Y1 (17*8)
-		#define MENU_Y2 (19*8)
+		#define MENU_Y0 (13*8)
+		#define MENU_Y1 (15*8)
+		#define MENU_Y2 (21*8)
 		#define MENU_X0 (12*8)
 		#define MENU_X1 (19*8)
 		#define MENU_XP1 ((16-3)*8)
@@ -1197,7 +1209,7 @@ void title()
 
 	// wipe existing text
 	for (i=0; i<64; ++i) ppu_send[i] = 0;
-	for (i=3; i<20; ++i)
+	for (i=3; i<22; ++i)
 	{
 		ppu_send_addr = 0x2000 + (32 * i);
 		frame_double();
@@ -2049,13 +2061,7 @@ void main()
 {
 	//fmult_test();
 
-	// replace the common "all 0s" or "all 1s" emulator RAM initialization seed
-	// with two hand-picked cases to make the title screen look nice.
-	// (further entropy for subsequent holes is gathered while waiting on the
-	// title screen, but I have to generate at least the title screen before user input.)
-	if (seed == 0x00800000) seed = 0x00654321; // field set 7 (yellow day), 4 holes to night
-	if (seed == 0x00FFFFFF) seed = 0x000D7755; // field set F (yellow night), 4 holes to day
-	if (seed == 0x00FF0000) seed = 0x00654399; // field set 7 (yellow day), 5 holes to night
+	seed = 0x00654321; // default seed: yellow, day (was the default seed used for all-zero RAM)
 
 	input_setup();
 
