@@ -5,7 +5,7 @@
 //
 
 const char rom_version[] = " ################  "
-	"NESert Golfing version 1.3 by Brad Smith, 2019"
+	"NESert Golfing version 1.4 by Brad Smith, 2019"
 	"  ################ ";
 
 // for debugging performance
@@ -1171,8 +1171,7 @@ void title()
 		}
 
 		prng(); // build up entropy
-		++frame_count;
-		
+
 		// colour cycle the cursor
 		if (!(frame_count & 7))
 		{
