@@ -167,6 +167,9 @@ _oam: .res 256
 .import popa ; A = byte from cstack, Y=0, sp+=1
 .import popax ; A:X = two bytes from cstack, Y=0, sp+=2
 
+.import _seed_start ; TE: from dgolf.c, it should persist on restart
+.import _holes
+
 ; ==============
 ; NESert Golfing
 ; ==============
@@ -1762,13 +1765,19 @@ reset:
 	:
 		bit $2002
 		bpl :-
-	; preserve PRNG seed (keeps randomness across reset) disabled for Tournament Edition
-	;lda _seed+2
-	;pha
-	;lda _seed+1
-	;pha
-	;lda _seed+0
-	;pha
+	; TE: preserve starting seed choice across reset, and holes
+	lda _seed_start+3
+	pha
+	lda _seed_start+2
+	pha
+	lda _seed_start+1
+	pha
+	lda _seed_start+0
+	pha
+	lda _holes+1
+	pha
+	lda _holes+0
+	pha
 	lda #0 ; clear RAM
 	tax
 	:
@@ -1783,13 +1792,18 @@ reset:
 		inx
 		bne :-
 	; restore PRNG seed
-	;pla
-	;sta _seed+0
-	;pla
-	;sta _seed+1
-	;pla
-	;ora #$80 ; make sure at least 1 bit of seed is set
-	;sta _seed+2
+	pla
+	sta _holes+0
+	pla
+	sta _holes+1
+	pla
+	sta _seed_start+0
+	pla
+	sta _seed_start+1
+	pla
+	sta _seed_start+2
+	pla
+	sta _seed_start+3
 	; clear stack, separately wipe OAM
 	lda #0
 	:

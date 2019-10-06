@@ -5,8 +5,9 @@
 // http://rainwarrior.ca
 //
 
+#define TEVERSION "1.4"
 const char rom_version[] = " ################  "
-	"NESert Golfing Tournament Edidtion version 1.3 by Brad Smith, 2019"
+	"NESert Golfing Tournament Edition version 1.4 by Brad Smith, 2019"
 	"  ################ ";
 
 // for debugging performance
@@ -337,6 +338,13 @@ uint8 mouse_new;
 uint8 mouse_steady;
 sint8 mouse_sx;
 sint8 mouse_sy;
+
+uint16 holes;
+uint8 seed_pos;
+uint8 holes_pos;
+uint32 seed_start;
+extern uint16 holes;
+extern uint32 seed_start;
 
 //
 // sound effects
@@ -722,6 +730,8 @@ void hole_next()
 		if (hole == LAST_HOLE_TEST) hole = 0;
 	#endif
 
+	if (hole == (holes & 0xFF)) hole = 0; // TE: configurable number of holes
+
 	fg_hold_mask = course_hm[course];
 	fg_angle_mask = course_hm[course];
 	++course; if (course >= 18) course = 0;
@@ -916,7 +926,8 @@ void delay(uint8 frames)
 //
 
 const char help_text[] =
-	"       NESert Golfing\n"
+	"     NESert Golfing " TEVERSION "\n"
+	"     Tournament Edition\n"
 	"      Brad Smith, 2019\n"
 	"   http://rainwarrior.ca\n"
 	"\n"
@@ -943,9 +954,9 @@ const char title_text[] =
 	"\n"
 	"How many?   1  2  3  4\n"
 	"\n"
-	"     Seed: ......\n" // TODO
+	"     Seed:       \n"
 	"\n"
-	"      Holes: ...\n" // TODO
+	"      Holes:    \n"
 	"\n"
 	"         Help";
 
@@ -1032,6 +1043,26 @@ const uint8 TITLE_NMT[16*8] = {
 	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F,
 	0x19, 0x23, 0x3D, 0x4D, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 };
+
+void seed_start_up()
+{
+	j = 20 - (seed_pos * 4);
+	i = (seed_start >> j) & 0xF;
+	seed_start &= (0xFFFFFFFFUL ^ (0xFUL << j));
+	i = (i+1) & 0xF;
+	seed_start |= ((uint32)i) << j;
+}
+
+void seed_start_down()
+{
+	j = 20 - (seed_pos * 4);
+	i = (seed_start >> j) & 0xF;
+	seed_start &= (0xFFFFFFFFUL ^ (0xFUL << j));
+	i = (i-1) & 0xF;
+	seed_start |= ((uint32)i) << j;
+}
+
+const uint16 HOLES_INC[3] = { 100, 10, 1 };
 
 void title()
 {
@@ -1121,11 +1152,14 @@ void title()
 	ppu_latch(0x27C0 + 0 + (0*2));
 	ppu_fill(attribute(1,1,1,1),48);
 	ppu_fill(attribute(3,3,3,3),16);
-	ppu_text(help_text, 0x2400 + 2 + (3 * 32));
+	ppu_text(help_text, 0x2400 + 2 + (2 * 32));
 
 	palette_generate(pal_sky, pal_floor, pal_text);
 
 	title_menu = 0;
+	seed_pos = 0;
+	holes_pos = 2;
+
 	ppu_scroll_x(0);
 	ppu_scroll_y(0);
 	palette[18] = 0x24;
@@ -1134,69 +1168,138 @@ void title()
 	{
 		#define MENU_Y0 (13*8)
 		#define MENU_Y1 (15*8)
-		#define MENU_Y2 (21*8)
+		#define MENU_Y2 (17*8)
+		#define MENU_Y3 (19*8)
+		#define MENU_Y4 (21*8)
 		#define MENU_X0 (12*8)
 		#define MENU_X1 (19*8)
 		#define MENU_XP1 ((16-3)*8)
+		#define MENU_XS0 (16*8)
+		#define MENU_XH0 (18*8)
+		#define TITLE_OPTS 5
 
 		palette[22] = BALL_COLOUR[players-1];
 		i = (frame_count / 8) & 3;
 		if (i == 0) i = 2;
 		palette[22] |= i << 4;
 
+		palette[23] = palette[1]; // use text color for seed/holes number sprites
+
 		sprite_begin();
-		if (title_menu != 1)
+
+		if (title_menu == 0 || title_menu == 4)
 		{
-			uint8 i = title_menu==0 ? MENU_Y0 : MENU_Y2;
+			uint8 i = title_menu==0 ? MENU_Y0 : MENU_Y4;
 			sprite_add(0x3A, MENU_X0,i,0x00);
 			sprite_add(0x3A, MENU_X1,i,0x40);
+		}
+		else if (title_menu == 2)
+		{
+			sprite_add(0x3B, MENU_XS0+(seed_pos*8), MENU_Y2-8,0x00);
+			sprite_add(0x3B, MENU_XS0+(seed_pos*8), MENU_Y2+7,0x80);
+		}
+		else if (title_menu == 3)
+		{
+			sprite_add(0x3B, MENU_XH0+(holes_pos*8), MENU_Y3-8,0x00);
+			sprite_add(0x3B, MENU_XH0+(holes_pos*8), MENU_Y3+7,0x80);
+		}
+		if (title_menu != 1)
+		{
 			palette[22] = (palette[22] & 0x0F) | 0x10; // darken, not selected
 		}
 		sprite_add(0x3A, MENU_XP1+(players*24), MENU_Y1, 0x01);
 		sprite_add(0x3A, MENU_XP1+16+(players*24), MENU_Y1, 0x41);
+
+		// TE: numbers
+		// hex dump of seed
+		for (i=0; i<24; i+=4)
+		{
+			j = (seed_start >> i) & 0x0F;
+			sprite_add(j, MENU_XS0+(5*8)-(i*2), MENU_Y2, 0x01);
+		}
+		// decimal holes count
+		mx = holes;
+		if      (holes >= 200) { sprite_add(2, MENU_XH0+0, MENU_Y3, 0x01); mx -= 200; }
+		else if (holes >= 100) { sprite_add(1, MENU_XH0+0, MENU_Y3, 0x01); mx -= 100; }
+		j = 0;
+		i = mx & 0xFF; // guaranteed to be < 100
+		while (i >= 10)
+		{
+			++j;
+			i -= 10;
+		} // j = 10s digit
+		if (holes >= 100 || j > 0) { sprite_add(j, MENU_XH0+8, MENU_Y3, 0x01); };
+		sprite_add(i, MENU_XH0+16, MENU_Y3, 0x01);
+
 		sprite_end();
 
 		frame();
 		new_poll();
 
-		if ((mouse_new & MOUSE_L) || (gamepad_new & PAD_START)) // START or LMB starts game unless help is selected
+		switch (title_menu)
 		{
-			if (title_menu != 2) break;
-			else help();
-		}
-		else if (mouse_new & MOUSE_R) // RMB cycles players
-		{
-			players = (players & 3) + 1;
-		}
-		else if ((title_menu != 1) && (gamepad_new & (PAD_A | PAD_B))) // A/B can also start game or help
-		{
-			if (title_menu != 2) break;
-			else help();
-		}
-		else if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) // SELECT or down on pad/mouse to switch selection
-		{
-			++title_menu;
-			if (title_menu > 2) title_menu = 0;
-		}
-		else if ((gamepad_new & PAD_UP) || mouse_sy < 0) // up on pad/mouse to switch selection (reverse)
-		{
-			--title_menu;
-			if (title_menu > 2) title_menu = 2;
-		}
-		else if (title_menu == 1) // players selection
-		{
-			if ((gamepad_new & (PAD_A | PAD_RIGHT)) || mouse_sx > 0) // A or right on pad/mouse to increase players
+		default:
+			title_menu=0; // failsafe?
+		case 0:
+			if ((mouse_new & MOUSE_L) || (gamepad_new & (PAD_START | PAD_A | PAD_B))) goto begin;
+			if (mouse_new & MOUSE_R) players = (players & 3) + 1;
+			if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+			if ((gamepad_new & PAD_UP) || mouse_sy < 0) title_menu = TITLE_OPTS-1;
+			break;
+		case 1:
+			if (gamepad_new & PAD_START) goto begin;
+			if ((mouse_new & (MOUSE_L | MOUSE_R)) || (gamepad_new & (PAD_A | PAD_RIGHT)) || mouse_sx > 0) players = (players & 3) + 1;
+			if ((gamepad_new & PAD_LEFT) || mouse_sx < 0) players = ((players + 2) & 3) + 1;
+			if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+			if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
+			break;
+		case 2:
+			if (gamepad_new & PAD_START) goto begin;
+			if ((mouse1 & (MOUSE_L | MOUSE_R)) || (gamepad & (PAD_A | PAD_B)))
 			{
-				players = (players & 3) + 1;
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0) seed_start_up();
+				if ((gamepad_new & PAD_DOWN) || mouse_sy > 0) seed_start_down();
 			}
-			else if ((gamepad_new & PAD_LEFT) || mouse_sx < 0) // left on pad/mouse to decrease players
+			else
 			{
-				players = ((players + 2) & 3) + 1;
+				if ((gamepad_new & PAD_RIGHT) || mouse_sx > 0) { seed_pos += 1; if (seed_pos >= 6) seed_pos = 0; }
+				if ((gamepad_new & PAD_LEFT) || mouse_sx < 0) { if (seed_pos > 0) --seed_pos; else seed_pos = 5; }
+				if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
 			}
+			break;
+		case 3:
+			if (gamepad_new & PAD_START) goto begin;
+			if ((mouse1 & (MOUSE_L | MOUSE_R)) || (gamepad & (PAD_A | PAD_B)))
+			{
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0)
+				{
+					holes += HOLES_INC[holes_pos];
+					if (holes > 256) holes = 256;
+				}
+				if ((gamepad_new & PAD_DOWN) || mouse_sy > 0)
+				{
+					if (holes >= HOLES_INC[holes_pos]) holes -= HOLES_INC[holes_pos];
+					if (holes < 2) holes = 2;
+				}
+			}
+			else
+			{
+				if ((gamepad_new & PAD_RIGHT) || mouse_sx > 0) { holes_pos += 1; if (holes_pos >= 3) holes_pos = 0; }
+				if ((gamepad_new & PAD_LEFT) || mouse_sx < 0) { if (holes_pos > 0) --holes_pos; else holes_pos = 2; }
+				if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
+			}
+			break;
+		case 4:
+			if ((mouse_new & MOUSE_L) || (gamepad_new & (PAD_START | PAD_A | PAD_B))) help();
+			if (mouse_new & MOUSE_R) players = (players & 3) + 1;
+			if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) title_menu=0;
+			if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
+			break;
 		}
 
 		//prng(); // build up entropy, not desired for TE
-		++frame_count;
 		
 		// colour cycle the cursor
 		if (!(frame_count & 7))
@@ -1206,6 +1309,7 @@ void title()
 			palette[18] = 0x20 | i;
 		}
 	}
+begin:
 
 	// prepare for game
 
@@ -1244,6 +1348,13 @@ void title()
 	ppu_send_addr = 0x27C0;
 	ppu_send_count = 64;
 	frame();
+
+	// apply starting seed
+	seed = seed_start;
+	for (i=0; i<8; ++i) prng(); // prime the RNG a little to increase "distance" from starting seed
+	seedw = seed;
+	transition_time = prng() & 3; // give it a slightly low value to encourage the seed to affect the landscape quickly
+	day = prng() & 7;
 
 	// create first tee (flat ground)
 	hole_cx = 256;
@@ -2079,6 +2190,13 @@ void main()
 	seed = 0x00456321; // yellow, day
 	seedw = seed; // weather PRNG will be reloaded from main PRNG at sync points
 	seedf = seed; // any nonzero value is find for free PRNG
+
+	// settings should persist across reset
+	if (holes < 2 || holes > 256 || ((seed_start >> 24) != 42))
+	{
+		holes = 100;
+		seed_start = 0x00123456 | (42UL << 24);
+	}
 
 	input_setup();
 
