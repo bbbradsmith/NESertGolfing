@@ -866,10 +866,6 @@ void weather_fade()
 
 void weather_attribute_set()
 {
-	seedw = seed; // TE: starting wind for a weather zone is always dependent on hole seed,
-	// if a player spends a long time on a hole the wind needs to keep changing, but
-	// it has to resync at the next weather zone transition
-
 	// sets speed and palette via whether tile is rain or snow
 	// the unused bits of the OAM attribute byte are used to control particle fall speed
 	weather_attribute = (weather_tile == 0x38) ? ((4<<2)|3) : ((1<<2)|2);
@@ -2134,6 +2130,8 @@ void hole_play()
 
 	// 7. prepare next hole
 	hole_next();
+
+	seedw = seed; // TE: re-synchronize the wind RNG at every hole
 
 	if (day) --day;
 
