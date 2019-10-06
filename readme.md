@@ -1,7 +1,5 @@
 # NESert Golfing Tournament Edition
 
-**THIS IS A WORK IN PROGRESS. NOT READY FOR USE YET.**
-
 This is an alternate version of
 [NESert Golfing](https://github.com/bbbradsmith/NESertGolfing)
 intended for competition. All of the random hold generation and weather
