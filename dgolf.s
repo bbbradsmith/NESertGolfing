@@ -1,4 +1,4 @@
-;-
+;
 ; dgolf.s
 ; NESert Golfing, by Brad Smith 2019
 ; http://rainwarrior.ca
