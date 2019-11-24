@@ -2,7 +2,7 @@
 
 This is an alternate version of
 [NESert Golfing](https://github.com/bbbradsmith/NESertGolfing)
-intended for competition. All of the random hold generation and weather
+intended for competition. All of the random hole generation and weather
 patterns have been replaced with an explicit seed that you can select
 from the title screen.
 
