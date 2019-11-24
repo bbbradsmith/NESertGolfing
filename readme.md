@@ -94,3 +94,8 @@ used as part of the build. See the file list below for details.
 - *temp/dgolf.nes* - Provided game ROM, already built.
 - *temp/runtime.lib* - Pre-compiled CC65 runtime library.
 - *temp/slopes.inc* - Generated slope tables.
+
+## Other Versions
+
+Tournament Edition:
+https://github.com/bbbradsmith/NESertGolfing/tree/tournament_edition
