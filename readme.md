@@ -1,6 +1,10 @@
-# NESert Golfing
+# NESert Golfing FDS
 
 A 2D golf game for the NES, directly inspired by [Desert Golfing](https://captaingames.itch.io/desert-golfing).
+
+This is an alternate version of
+[NESert Golfing](https://github.com/bbbradsmith/NESertGolfing)
+for the Famicom Disk System.
 
 Brad Smith, 2019.
 
@@ -94,8 +98,3 @@ used as part of the build. See the file list below for details.
 - *temp/dgolf.nes* - Provided game ROM, already built.
 - *temp/runtime.lib* - Pre-compiled CC65 runtime library.
 - *temp/slopes.inc* - Generated slope tables.
-
-## Other Versions
-
-Tournament Edition:
-https://github.com/bbbradsmith/NESertGolfing/tree/tournament_edition

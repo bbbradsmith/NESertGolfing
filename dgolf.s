@@ -1675,68 +1675,70 @@ nmi:
 irq:
 	rti
 
-reset:
-	; already done in reset_stub
+reset_dgolf:
+	;
+	; this stuff is handled by the FDS reset below
+	;
 	;sei       ; disable maskable interrupts
 	;lda #0
 	;sta $2000 ; disable non-maskable interrupt
-	lda #0
-	sta $2001 ; rendering off
-	sta $4010 ; disable DMC IRQ
-	sta $4015 ; disable APU sound
-	lda #$40
-	sta $4017 ; disable APU IRQ
-	cld       ; disable decimal mode
-	ldx #$FF
-	txs       ; setup tack
-	; wait for vblank #1
-	bit $2002
-	:
-		bit $2002
-		bpl :-
-	; preserve PRNG seed (keeps randomness across reset)
-	lda _seed+2
-	pha
-	lda _seed+1
-	pha
-	lda _seed+0
-	pha
-	lda #0 ; clear RAM
-	tax
-	:
-		sta $0000, X
-		;sta $0100, X ; don't clear stack yet
-		sta $0200, X
-		sta $0300, X
-		sta $0400, X
-		sta $0500, X
-		sta $0600, X
-		sta $0700, X
-		inx
-		bne :-
-	; restore PRNG seed
-	pla
-	sta _seed+0
-	pla
-	sta _seed+1
-	pla
-	ora #$80 ; make sure at least 1 bit of seed is set
-	sta _seed+2
-	; clear stack, separately wipe OAM
-	lda #0
-	:
-		sta $0100, X
-		inx
-		bne :-
-	lda #$FF
-	:
-		sta _oam, X
-		inx
-		bne :-
-	; wait for vblank #2
-	:
-		bit $2002
-		bpl :-
+	;lda #0
+	;sta $2001 ; rendering off
+	;sta $4010 ; disable DMC IRQ
+	;sta $4015 ; disable APU sound
+	;lda #$40
+	;sta $4017 ; disable APU IRQ
+	;cld       ; disable decimal mode
+	;ldx #$FF
+	;txs       ; setup stack
+	;; wait for vblank #1
+	;bit $2002
+	;:
+	;	bit $2002
+	;	bpl :-
+	;; preserve PRNG seed (keeps randomness across reset)
+	;lda _seed+2
+	;pha
+	;lda _seed+1
+	;pha
+	;lda _seed+0
+	;pha
+	;lda #0 ; clear RAM
+	;tax
+	;:
+	;	sta $0000, X
+	;	;sta $0100, X ; don't clear stack yet
+	;	sta $0200, X
+	;	sta $0300, X
+	;	sta $0400, X
+	;	sta $0500, X
+	;	sta $0600, X
+	;	sta $0700, X
+	;	inx
+	;	bne :-
+	;; restore PRNG seed
+	;pla
+	;sta _seed+0
+	;pla
+	;sta _seed+1
+	;pla
+	;ora #$80 ; make sure at least 1 bit of seed is set
+	;sta _seed+2
+	;; clear stack, separately wipe OAM
+	;;lda #0
+	;:
+	;	sta $0100, X
+	;	inx
+	;	bne :-
+	;lda #$FF
+	;:
+	;	sta _oam, X
+	;	inx
+	;	bne :-
+	;; wait for vblank #2
+	;:
+	;	bit $2002
+	;	bpl :-
 	; initialize internal variables
 	jsr sound_init
 	lda #%00011110 ; No emphasis, no greyscale, BG and sprite shown, no hidden column
@@ -1761,60 +1763,262 @@ reset:
 
 .segment "CODE"
 cc65_init:
-	jsr copydata
+	;jsr copydata ; already handled by FDS load
 	lda #<(cstack + CSTACK_SIZE)
 	sta sp+0
 	lda #>(cstack + CSTACK_SIZE)
 	sta sp+1
 	rts
 
-; =======
-; NES ROM
-; =======
+; ========
+; FDS Disk
+; ========
+
+BYPASS   = 1    ; bypass the license screen
+WIPE_RAM = 1    ; wipes unused portion of FDS RAM at startup
+
+; setting the file count 1 higher than files on disk for the license "bypass" technique
+FILE_COUNT = 3 + BYPASS
 
 .segment "HEADER"
+.byte 'F','D','S',$1A
+.byte 1 ; side count
 
-INES_MAPPER     = 2 ; UNROM
-INES_MIRROR     = 1 ; horizontal nametables
-INES_PRG_16K    = 2 ; 32K
-INES_CHR_8K     = 0
-INES_BATTERY    = 0
-INES2           = %00001000 ; NES 2.0 flag for bit 7
-INES2_SUBMAPPER = 0
-INES2_PRGRAM    = 0
-INES2_PRGBAT    = 0
-INES2_CHRRAM    = 7 ; 8K
-INES2_CHRBAT    = 0
-INES2_REGION    = 2 ; 0=NTSC, 1=PAL, 2=Dual
+.segment "SIDE1A"
+; block 1
+.byte $01
+.byte "*NINTENDO-HVC*"
+.byte $00 ; manufacturer
+.byte "EXA"
+.byte $20 ; normal disk
+.byte $00 ; game version
+.byte $00 ; side
+.byte $00 ; disk
+.byte $00 ; disk type
+.byte $00 ; unknown
+.byte FILE_COUNT ; boot file count
+.byte $FF,$FF,$FF,$FF,$FF
+.byte $96 ; 2021
+.byte $06 ; june
+.byte $05 ; 5
+.byte $49 ; country
+.byte $61, $00, $00, $02, $00, $00, $00, $00, $00 ; unknown
+.byte $92 ; 2017
+.byte $04 ; april
+.byte $17 ; 17
+.byte $00, $80 ; unknown
+.byte $00, $00 ; disk writer serial number
+.byte $07 ; unknown
+.byte $00 ; disk write count
+.byte $00 ; actual disk side
+.byte $00 ; unknown
+.byte $00 ; price
+; block 2
+.byte $02
+.byte FILE_COUNT
 
-; iNES 1 header
-.byte 'N', 'E', 'S', $1A ; ID
-.byte <INES_PRG_16K
-.byte INES_CHR_8K
-.byte INES_MIRROR | (INES_BATTERY << 1) | ((INES_MAPPER & $f) << 4)
-.byte (<INES_MAPPER & %11110000) | INES2
-; iNES 2 section
-.byte (INES2_SUBMAPPER << 4) | (INES_MAPPER>>8)
-.byte ((INES_CHR_8K >> 8) << 4) | (INES_PRG_16K >> 8)
-.byte (INES2_PRGBAT << 4) | INES2_PRGRAM
-.byte (INES2_CHRBAT << 4) | INES2_CHRRAM
-.byte INES2_REGION
-.byte $00 ; VS system
-.byte $00, $00 ; padding/reserved
-.assert * = 16, error, "NES header must be 16 bytes."
+.segment "FILE0_HDR"
+; block 3
+.import __PRG0_START__
+.import __PRG0_LAST__
+.byte $03
+.byte 0,0
+.byte "PRG0...."
+.word __PRG0_START__
+.word __PRG0_LAST__ - __PRG0_START__
+.byte 0 ; PRG
+; block 4
+.byte $04
+;.segment "ALIGN"
+;.segment "DATA"
+;.segment "RODATA"
+;.segment "CODE"
 
-.segment "STUB"
-reset_stub:
-	sei       ; disable maskable interrupts
-	lda #0
-	sta $2000 ; disable non-maskable interrupt
-	sta @zero ; setup up UxROM bank 0
-	jmp reset
-	@zero: .byte 0
+.segment "FILE1_HDR"
+; block 3
+.import __FILE1_DAT_RUN__
+.import __FILE1_DAT_SIZE__
+.byte $03
+.byte 1,1
+.byte "VEC1...."
+.word __FILE1_DAT_RUN__
+.word __FILE1_DAT_SIZE__
+.byte 0 ; PRG
+; block 4
+.byte $04
+;.segment "FILE1_DAT"
 
-.segment "VECTORS"
+; This block is the last to load, and enables NMI by "loading" the NMI enable value
+; directly into the PPU control register at $2000.
+; While the disk loader continues searching for one more boot file,
+; eventually an NMI fires, allowing us to take control of the CPU before the
+; license screen is displayed.
+.segment "FILE2_HDR"
+; block 3
+.import __FILE2_DAT_SIZE__
+.import __FILE2_DAT_RUN__
+.byte $03
+.byte 2,2
+.byte "CHK2...."
+.word $2000
+.word __FILE2_DAT_SIZE__
+.byte 0 ; PRG (CPU:$2000)
+; block 4
+.byte $04
+.segment "FILE2_DAT"
+.byte $90 ; enable NMI byte sent to $2000
+
+;
+; FDS vectors
+;
+
+.segment "FILE1_DAT"
 .word nmi
-.word reset_stub
+.word nmi
+.word bypass
+.word reset
 .word irq
+
+;
+; reset routine
+;
+
+.segment "CODE"
+
+; this routine is entered by interrupting the last boot file load
+; by forcing an NMI not expected by the BIOS, allowing the license
+; screen to be skipped entirely.
+;
+; The last file writes $90 to $2000, enabling NMI during the file load.
+; The "extra" file in the FILE_COUNT causes the disk to keep seeking
+; past the last file, giving enough delay for an NMI to fire and interrupt
+; the process.
+bypass:
+	; disable NMI
+	lda #0
+	sta $2000
+	; replace NMI 3 "bypass" vector at $DFFA
+	lda #<nmi
+	sta $DFFA
+	lda #>nmi
+	sta $DFFB
+	; tell the FDS reset routine that the BIOS initialized correctly
+	lda #$35
+	sta $0102
+	lda #$AC
+	sta $0103
+	; reset the FDS to begin our program properly
+	jmp ($FFFC)
+
+reset:
+	; set FDS to use vertical mirroring
+	lda $FA
+	and #%11110111
+	sta $4025
+	;
+	sei       ; mask interrupts
+	lda #0
+	sta $2000 ; disable NMI
+	sta $2001 ; disable rendering
+	sta $4015 ; disable APU sound
+	sta $4010 ; disable DMC IRQ
+	lda #$40
+	sta $4017 ; disable APU IRQ
+	cld       ; disable decimal mode
+	ldx #$FF
+	txs       ; initialize stack
+	; wait for first vblank
+	bit $2002
+	:
+		bit $2002
+		bpl :-
+	; preserve PRNG seed (keeps randomness across reset)
+	lda _seed+2
+	pha
+	lda _seed+1
+	pha
+	lda _seed+0
+	pha
+	; clear not-quite all RAM to 0
+	lda #0
+	tax
+	:
+		;sta $0000, X ; the FDS uses part of the stack and ZP,
+		;sta $0100, X ; so only partially clearing them.
+		sta $0200, X
+		sta $0300, X
+		sta $0400, X
+		sta $0500, X
+		sta $0600, X
+		sta $0700, X
+		inx
+		bne :-
+	;ldx #$00
+	:
+		sta $00, X
+		inx
+		cpx #$F9 ; $F9-FF used by FDS BIOS
+		bcc :-
+	; restore PRNG seed
+	pla
+	sta _seed+0
+	pla
+	sta _seed+1
+	pla
+	ora #$80 ; make sure at least 1 bit of seed is set
+	sta _seed+2
+	; stack
+	lda #0
+	ldx #$04 ; $0100-$0103 used by FDS BIOS
+	:
+		sta $100, X
+		inx
+		bne :-
+	; place all sprites offscreen at Y=255
+	lda #255
+	;ldx #0
+	:
+		sta _oam, X
+		inx
+		bne :-
+	; wipe unused portion of FDS RAM (between FILE0 and FILE1)
+	.if (WIPE_RAM <> 0)
+		WIPE_ADDR = __PRG0_LAST__
+		WIPE_SIZE = __FILE1_DAT_RUN__ - WIPE_ADDR
+		lda #<WIPE_ADDR
+		sta $00
+		lda #>WIPE_ADDR
+		sta $01
+		lda #0
+		tay
+		ldx #>WIPE_SIZE
+		beq :++
+		: ; 256 byte blocks
+			sta ($00), Y
+			iny
+			bne :-
+			inc $01
+			dex
+			bne :-
+		: ; leftover
+		ldy #<WIPE_SIZE
+		beq :++
+		:
+			dey
+			sta ($00), Y
+			bne :-
+		:
+		sta $00
+		sta $01
+	.endif
+	; wait for second vblank
+	:
+		bit $2002
+		bpl :-
+	; NES is initialized, ready to begin!
+	; enable the NMI for graphical updates, and jump to our main program
+	lda #%10001000
+	sta $2000
+	jmp reset_dgolf
 
 ; end of file

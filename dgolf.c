@@ -2055,6 +2055,7 @@ void main()
 	if (seed == 0x00800000) seed = 0x00654321; // field set 7 (yellow day), 4 holes to night
 	if (seed == 0x00FFFFFF) seed = 0x000D7755; // field set F (yellow night), 4 holes to day
 	if (seed == 0x00FF0000) seed = 0x00654399; // field set 7 (yellow day), 5 holes to night
+	if (seed == 0x00FAEFF5) seed = 0x00654321; // FDS BIOS initializes seed to this at power on?
 
 	input_setup();
 
