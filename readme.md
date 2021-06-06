@@ -99,3 +99,6 @@ used as part of the build. See the file list below for details.
 
 Tournament Edition:
 https://github.com/bbbradsmith/NESertGolfing/tree/tournament_edition
+
+Famicom Disk System:
+https://github.com/bbbradsmith/NESertGolfing/tree/fds
