@@ -7,6 +7,7 @@ temp/*.dbg
 temp/*.map
 temp/*.lst
 temp/*.nes
+temp/*.sfc
 *.opt
 cmd.exe.lnk
 spc/spc.o

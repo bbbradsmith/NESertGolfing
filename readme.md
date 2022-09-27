@@ -2,7 +2,11 @@
 
 A 2D golf game for the NES, directly inspired by [Desert Golfing](https://captaingames.itch.io/desert-golfing).
 
-Brad Smith, 2019.
+This is an alternate version of
+[NESert Golfing](https://github.com/bbbradsmith/NESertGolfing)
+for the SNES. **(It is a work in progress.)**
+
+Brad Smith, 2022.
 
 Official website:
 https://rainwarrior.itch.io/nesert-golfing
@@ -98,9 +102,6 @@ used as part of the build. See the file list below for details.
 - *temp/slopes.inc* - Generated slope tables.
 
 ## Other Versions
-
-Famicom Disk System:
-- https://github.com/bbbradsmith/NESertGolfing/tree/fds
 
 Tournament Edition:
 - In version 1.5 this was merged into the regular game. Select HELP from the menu, press and hold A, then press SELECT to switch to Tournament Edition.

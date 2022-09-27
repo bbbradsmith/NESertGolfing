@@ -172,6 +172,25 @@ _oam: .res 256
 .import _seed_start ; TE: from dgolf.c, it should persist on restart
 .import _holes
 
+; ===========================
+; SNES Extensions (in snes.s)
+; ===========================
+
+.p816
+
+.import snes_reset : far
+.import snes_init : far
+.import snes_nmi : far
+
+.export sound_update_long : far
+.export nes_apu : abs
+
+.segment "SNESRAM"
+
+nes_apu:       .res 32 ; SNES emulation of NES APU
+
+.p02
+
 ; ==============
 ; NESert Golfing
 ; ==============
@@ -1225,19 +1244,22 @@ apu_init:
 .macro APU_INIT addr
 	.assert (addr >= $4000 && addr < $4010), error, "APU_INIT parameter range: $4000-$400F"
 	lda apu_init + (addr - $4000)
-	sta addr
+	;sta addr
+	sta nes_apu + (addr - $4000) ; SNES
 .endmacro
 
 .macro APU_COPY addr
 	.assert (addr >= $4000 && addr < $4010), error, "APU_COPY parameter range: $4000-$400F"
 	lda apu_out + (addr - $4000)
-	sta addr
+	;sta addr
+	sta nes_apu + (addr - $4000) ; SNES
 .endmacro
 
 .macro APU_OUT_RESET addr
 	.assert (addr >= $4000 && addr < $4010), error, "APU_OUT_RESET parameter range: $4000-$400F"
 	lda apu_init + (addr - $4000)
-	sta apu_out + (addr - $4000)
+	;sta apu_out + (addr - $4000)
+	sta nes_apu + (addr - $4000) ; SNES
 .endmacro
 
 .segment "CODE"
@@ -1673,6 +1695,13 @@ _ppu_apply:
 	rts
 
 nmi:
+	.p816
+	.a8
+	.i8
+	jsl snes_nmi
+	rti
+	.p02
+; unused NES code for reference:
 	pha
 	txa
 	pha
@@ -1783,24 +1812,21 @@ irq:
 	rti
 
 reset:
-	; already done in reset_stub
-	;sei       ; disable maskable interrupts
+	; NES stuff handled in reset_stub call
 	;lda #0
-	;sta $2000 ; disable non-maskable interrupt
-	lda #0
-	sta $2001 ; rendering off
-	sta $4010 ; disable DMC IRQ
-	sta $4015 ; disable APU sound
-	lda #$40
-	sta $4017 ; disable APU IRQ
-	cld       ; disable decimal mode
-	ldx #$FF
-	txs       ; setup stack
+	;sta $2001 ; rendering off
+	;sta $4010 ; disable DMC IRQ
+	;sta $4015 ; disable APU sound
+	;lda #$40
+	;sta $4017 ; disable APU IRQ
+	;cld       ; disable decimal mode
+	;ldx #$FF
+	;txs       ; setup stack
 	; wait for vblank #1
-	bit $2002
-	:
-		bit $2002
-		bpl :-
+	;bit $2002
+	;:
+	;	bit $2002
+	;	bpl :-
 	; TE decide at reset whether to use tournament edition
 	; if signature is present: keep/flip te, otherwise te = 0
 	TE_SIG1 = $19
@@ -1919,17 +1945,21 @@ reset:
 		sta _oam, X
 		inx
 		bne :-
-	; wait for vblank #2
-	:
-		bit $2002
-		bpl :-
+	; NES wait for vblank #2
+	;:
+	;	bit $2002
+	;	bpl :-
 	; initialize internal variables
 	jsr sound_init
-	lda #%00011110 ; No emphasis, no greyscale, BG and sprite shown, no hidden column
-	sta ppu_2001
-	lda #%10001000 ; NMI on, 8-pixel sprites, BG page 0, Sprite page 1
-	sta ppu_2000
-	sta $2000 ; turn NMI on permanently
+	; Replaced with snes_init
+	;lda #%00011110 ; No emphasis, no greyscale, BG and sprite shown, no hidden column
+	;sta ppu_2001
+	;lda #%10001000 ; NMI on, 8-pixel sprites, BG page 0, Sprite page 1
+	;sta ppu_2000
+	;sta $2000 ; turn NMI on permanently
+	.p816
+	jsl snes_init
+	.p02
 	; initialize CC65 and enter main()
 	jsr cc65_init
 	jsr _main
@@ -1962,50 +1992,72 @@ cc65_init:
 	rts
 
 ; =======
-; NES ROM
+; SNES ROM
 ; =======
 
-.segment "HEADER"
+.p816
+.a8
+.i8
 
-INES_MAPPER     = 2 ; UNROM
-INES_MIRROR     = 1 ; horizontal nametables
-INES_PRG_16K    = 2 ; 32K
-INES_CHR_8K     = 0
-INES_BATTERY    = 0
-INES2           = %00001000 ; NES 2.0 flag for bit 7
-INES2_SUBMAPPER = 0
-INES2_PRGRAM    = 0
-INES2_PRGBAT    = 0
-INES2_CHRRAM    = 7 ; 8K
-INES2_CHRBAT    = 0
-INES2_REGION    = 2 ; 0=NTSC, 1=PAL, 2=Dual
+.segment "CODE"
 
-; iNES 1 header
-.byte 'N', 'E', 'S', $1A ; ID
-.byte <INES_PRG_16K
-.byte INES_CHR_8K
-.byte INES_MIRROR | (INES_BATTERY << 1) | ((INES_MAPPER & $f) << 4)
-.byte (<INES_MAPPER & %11110000) | INES2
-; iNES 2 section
-.byte (INES2_SUBMAPPER << 4) | (INES_MAPPER>>8)
-.byte ((INES_CHR_8K >> 8) << 4) | (INES_PRG_16K >> 8)
-.byte (INES2_PRGBAT << 4) | INES2_PRGRAM
-.byte (INES2_CHRBAT << 4) | INES2_CHRRAM
-.byte INES2_REGION
-.byte $00 ; VS system
-.byte $00, $00 ; padding/reserved
-.assert * = 16, error, "NES header must be 16 bytes."
+sound_update_long:
+	jsr sound_update
+	rtl
 
 .segment "STUB"
-reset_stub:
-	sei       ; disable maskable interrupts
-	lda #0
-	sta $2000 ; disable non-maskable interrupt
-	sta @zero ; setup up UxROM bank 0
-	jmp reset
-	@zero: .byte 0
 
-.segment "VECTORS"
+reset_stub:
+	sei
+	clc
+	xce ; disable 6502 emulation
+	stz $4200 ; disable NMI/IRQ
+	rep #$30
+	.a16
+	.i16
+	ldx #$01FF
+	txs ; setup stack
+	sep #$30
+	.a8
+	.i8
+	jsl snes_reset
+	; JML f:$80:reset
+	.byte $5C
+	.word reset
+	.byte $80
+
+.p02
+
+.segment "SNESHEAD"
+
+.byte "SNESERT GOLFING      "
+.byte $20 ; map mode
+.byte $00 ; cartridge type (ROM only)
+.byte $06 ; 64kb / 0.5 mbit
+.byte $00 ; RAM size
+.byte $01 ; destination code (north america)
+.byte $00 ; dev ID (not $33 indicates v1 header)
+.byte $00 ; mask ROM version
+.word $0000 ; checksum
+.word $FFFF ; checksum complement
+
+; native vectors
+.assert (*=$FFE0), error, "native vectors misplaced"
+.word $FFFF
+.word $FFFF
+.word irq ; COP
+.word irq ; BRK
+.word irq ; ABORT
+.word nmi
+.word reset_stub
+.word irq
+; emulation vectors
+.assert (*=$FFF0), error, "emulation vectors misplaced"
+.word $FFFF
+.word $FFFF
+.word irq ; COP
+.word irq ; BRK
+.word irq ; ABORT
 .word nmi
 .word reset_stub
 .word irq
