@@ -9,3 +9,5 @@ temp/*.lst
 temp/*.nes
 *.opt
 cmd.exe.lnk
+spc/spc.o
+spc/wla-dx/
