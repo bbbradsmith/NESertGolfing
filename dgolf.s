@@ -14,6 +14,8 @@
 _ptr:          .res 2 ; shared pointer for C interface
 _seed:         .res 4 ; random number seed (only using low 3 bytes)
 ppu_post_mode: .res 1
+_seedw:        .res 4 ; TE dependent seed for wind changes only
+_seedf:        .res 4 ; TE independent seed for things that can still be random (e.g. rain/snow animation)ppu_post_mode: .res 1
 sound_ptr:     .res 2
 _input:        .res 16
 mouse_index:   .res 1
@@ -34,6 +36,8 @@ _ox:   .res 2
 _px:   .res 2
 _ux:   .res 2
 _vx:   .res 2
+
+_te:           .res 4 ; TE signature for selecting TE mode (first byte is 0/nonzero for TE)
 
 ; nesert golfing
 
@@ -107,10 +111,12 @@ _oam: .res 256
 
 .exportzp _ptr
 .exportzp _seed
+.exportzp _seedw, _seedf
 .exportzp _input, _gamepad, _mouse1, _mouse2, _mouse3
 .exportzp _i,_j,_k,_l
 .exportzp _mx,_nx,_ox,_px
 .exportzp _ux,_vx
+.exportzp _te
 
 .exportzp _floor_column
 .exportzp _weather_tile
@@ -163,6 +169,9 @@ _oam: .res 256
 .import popa ; A = byte from cstack, Y=0, sp+=1
 .import popax ; A:X = two bytes from cstack, Y=0, sp+=2
 
+.import _seed_start ; TE: from dgolf.c, it should persist on restart
+.import _holes
+
 ; ==============
 ; NESert Golfing
 ; ==============
@@ -171,8 +180,10 @@ OCEAN_FLOOR = 224 ; must be multiple of 8 and match parallel definition in dgolf
 
 .export _layers_chr
 .export _sprite_chr
+.export _layerste_chr
 .export _LAYERS_CHR_SIZE
 .export _SPRITE_CHR_SIZE
+.export _LAYERSTE_CHR_SIZE
 
 .export _read_slope
 .export _read_norm_x
@@ -184,6 +195,8 @@ OCEAN_FLOOR = 224 ; must be multiple of 8 and match parallel definition in dgolf
 
 .export _hole
 
+.export _te_switch
+
 .segment "RODATA"
 
 _layers_chr: .incbin "layers.chr"
@@ -191,6 +204,9 @@ _LAYERS_CHR_SIZE: .word * - _layers_chr
 
 _sprite_chr: .incbin "sprite.chr"
 _SPRITE_CHR_SIZE: .word * - _sprite_chr
+
+_layerste_chr: .incbin "layerste.chr"
+_LAYERSTE_CHR_SIZE: .word * - _layerste_chr
 
 .include "temp/slopes.inc"
 ;slope_y0/1
@@ -517,10 +533,22 @@ spawn:
 	sta _oam + 1, Y
 	lda _weather_attribute
 	sta _oam + 2, Y
-	jsr _prng ; X
+	lda _te
+	bne :+
+		jsr _prng ; X
+		jmp :++
+	: ; TE uses separated rain PRNG
+		jsr _prngf
+	:
 	sta _oam + 3, Y
 	; set time until next spawn
-	jsr _prng
+	lda _te
+	bne :+
+		jsr _prng
+		jmp :++
+	: ; TE uses separated rain PRNG
+		jsr _prngf
+	:
 	and _weather_rate_mask
 	clc
 	adc _weather_rate_min
@@ -548,7 +576,9 @@ animate_loop:
 	adc _oam + 0, X
 	sta _oam + 0, X
 	; wind
-	:
+	lda _te
+	bne @wind_te ; TE
+	@wind: ; non-TE uses shared PRNG
 		jsr prng1
 		cmp _weather_wind_p
 		bcs :+
@@ -558,8 +588,21 @@ animate_loop:
 			sta _oam + 3, X
 		:
 		dey ; multiply wind by fall velocity
-		bne :--
-	;
+		bne @wind
+	jmp @collide
+	@wind_te: ; TE uses separated rain PRNG
+		jsr prngf1
+		cmp _weather_wind_p
+		bcs :+
+			lda _oam + 3, X
+			clc
+			adc _weather_wind_dir
+			sta _oam + 3, X
+		:
+		dey ; multiply wind by fall velocity
+		bne @wind_te
+	;jmp @collide
+@collide:
 	; collide with floor
 	lda _oam + 3, X
 	clc
@@ -868,6 +911,10 @@ lsr4: ; logical shift right 4 bits
 
 .export _prng
 .export _prng1
+.export _prngw ; TE
+.export _prngw1 ; TE
+.export _prngf ; TE
+.export _prngf1 ; TE
 .export _mouse_sense
 .export _input_setup
 .export _input_poll
@@ -902,6 +949,66 @@ prng1:
 	eor #$1B
 :
 	sta _seed+0
+	rts
+
+_prngw: ; TE
+	ldx #8
+prngwx:
+	lda _seedw+0
+:
+	asl
+	rol _seedw+1
+	rol _seedw+2
+	bcc :+
+	eor #$1B
+:
+	dex
+	bne :--
+	sta _seedw+0
+	;ldx #0 ; clear high bits of return value
+	rts
+
+_prngw1: ; TE
+	ldx #0
+prngw1:
+	lda _seedw+0
+	asl
+	rol _seedw+1
+	rol _seedw+2
+	bcc :+
+	eor #$1B
+:
+	sta _seedw+0
+	rts
+
+_prngf: ; TE
+	ldx #8
+prngfx:
+	lda _seedf+0
+:
+	asl
+	rol _seedf+1
+	rol _seedf+2
+	bcc :+
+	eor #$1B
+:
+	dex
+	bne :--
+	sta _seedf+0
+	;ldx #0 ; clear high bits of return value
+	rts
+
+_prngf1: ; TE
+	ldx #0
+prngf1:
+	lda _seedf+0
+	asl
+	rol _seedf+1
+	rol _seedf+2
+	bcc :+
+	eor #$1B
+:
+	sta _seedf+0
 	rts
 
 input_poll_raw:
@@ -1751,6 +1858,13 @@ reset_dgolf:
 	jsr _main
 	jmp ($FFFC)
 
+_te_switch: ; void te_switch()
+	lda #POST_OFF
+	jsr _ppu_post
+	lda #TE_SIG2+1 ; (+1) 02 = flip
+	sta _te+2
+	jmp ($FFFC)
+
 ; ==========
 ; CC65 setup
 ; ==========
@@ -1932,6 +2046,39 @@ reset:
 	:
 		bit $2002
 		bpl :-
+	; TE decide at reset whether to use tournament edition
+	; if signature is present: keep/flip te, otherwise te = 0
+	TE_SIG1 = $19
+	TE_SIG2 = $01 ; 01 = keep, (+1) 02 = flip
+	TE_SIG3 = $31
+	lda _te+0
+	cmp #2
+	bcs @te0 ; if it wasn't 0 or 1, is invalid, so reset
+	lda _te+1
+	cmp #TE_SIG1
+	bne @te0
+	lda _te+3
+	cmp #TE_SIG3
+	bne @te0
+	lda _te+2
+	cmp #TE_SIG2 ; 01 = keep
+	beq @te_ready
+	cmp #TE_SIG2+1 ; (+1) 02 = flip
+	bne @te0 ; unknown = reset
+@te_flip:
+	lda _te+0
+	bne @te0
+	lda #1
+	sta _te+0
+	jmp @te_ready
+@te0:
+	lda #0
+	sta _te+0
+@te_ready:
+	; preserve values across reset
+	lda _te+0
+	bne @preserve_te
+@preserve:
 	; preserve PRNG seed (keeps randomness across reset)
 	lda _seed+2
 	pha
@@ -1939,6 +2086,25 @@ reset:
 	pha
 	lda _seed+0
 	pha
+	jmp @clear_ram
+@preserve_te:
+	; TE: preserve starting seed choice across reset, and holes
+	lda _seed_start+3
+	pha
+	lda _seed_start+2
+	pha
+	lda _seed_start+1
+	pha
+	lda _seed_start+0
+	pha
+	lda _holes+1
+	pha
+	lda _holes+0
+	pha
+	;jmp @clear_ram
+@clear_ram:
+	lda _te+0
+	pha ; always preserve te
 	; clear not-quite all RAM to 0
 	lda #0
 	tax
@@ -1959,6 +2125,10 @@ reset:
 		inx
 		cpx #$F9 ; $F9-FF used by FDS BIOS
 		bcc :-
+	pla ; restore te
+	sta _te+0
+	bne @restore_te
+@restore:
 	; restore PRNG seed
 	pla
 	sta _seed+0
@@ -1967,11 +2137,34 @@ reset:
 	pla
 	ora #$80 ; make sure at least 1 bit of seed is set
 	sta _seed+2
-	; stack
+	jmp @clear_stack
+@restore_te:
+	pla
+	sta _holes+0
+	pla
+	sta _holes+1
+	pla
+	sta _seed_start+0
+	pla
+	sta _seed_start+1
+	pla
+	sta _seed_start+2
+	pla
+	sta _seed_start+3
+	;jmp @clear_stack
+@clear_stack:
+	; set valid TE signature
+	lda #TE_SIG1
+	sta _te+1
+	lda #TE_SIG2
+	sta _te+2
+	lda #TE_SIG3
+	sta _te+3
+	; clear stack, separately wipe OAM
 	lda #0
 	ldx #$04 ; $0100-$0103 used by FDS BIOS
 	:
-		sta $100, X
+		sta $0100, X
 		inx
 		bne :-
 	; place all sprites offscreen at Y=255
