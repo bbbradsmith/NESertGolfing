@@ -1795,7 +1795,7 @@ reset:
 	sta $4017 ; disable APU IRQ
 	cld       ; disable decimal mode
 	ldx #$FF
-	txs       ; setup tack
+	txs       ; setup stack
 	; wait for vblank #1
 	bit $2002
 	:
