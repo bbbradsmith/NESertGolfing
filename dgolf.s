@@ -631,9 +631,6 @@ animate_next:
 	inx
 	bne animate_loop
 	rts
-
-
-
 .endproc
 
 .proc _fmult
