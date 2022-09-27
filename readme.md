@@ -78,16 +78,18 @@ used as part of the build. See the file list below for details.
 
 - *build.bat* - Batch file to build *temp/dgolf.nes*.
 - *build_runtime.bat* - Batch file to rebuild *temp/runtime.lib*.
-- *build_data.py* - Python script to build *layers.chr*, *sprite.chr*, and *temp/slopes.inc*.
+- *build_data.py* - Python script to build *layers.chr*, *layerste.chr*, *sprite.chr*, and *temp/slopes.inc*.
 - *fmult.py* - Python script for prototyping *_fmult* subroutine found in *dgolf.s*.
 - *dgolf.c* - C code for NESert Golfing.
 - *dgolf.s* - Assembly code for NESert Golfing.
 - *blend.s* - Assembly code generic 4-step NES colour blend.
 - *dgolf.cfg* - ROM build layout for CC65 linker.
 - *layer1.png* - Title image tiles, monochrome.
+- *layer1te.png* - Tournament Edition title image tiles, monochrome.
 - *layer2.png* - Font set tiles, monochrome.
 - *sprite.png* - Sprite tiles, 3 colour.
 - *layers.chr* - Compiled from *layer1.png* and *layer2.png*.
+- *layerste.chr* - Compiled from *layer1te.png* and *layer2.png*.
 - *sprite.chr* - Compiled from *sprite.png*.
 - *sounds.ftm* - FamiTracker prototype of the sound effects used in the game.
 - *splash.ase* - Aseprite animation prototype of the ball splashing into the sea.
@@ -97,8 +99,8 @@ used as part of the build. See the file list below for details.
 
 ## Other Versions
 
-Tournament Edition:
-https://github.com/bbbradsmith/NESertGolfing/tree/tournament_edition
-
 Famicom Disk System:
-https://github.com/bbbradsmith/NESertGolfing/tree/fds
+- https://github.com/bbbradsmith/NESertGolfing/tree/fds
+
+Tournament Edition:
+- In version 1.5 this was merged into the regular game. Select HELP from the menu, press and hold A, then press SELECT to switch to Tournament Edition.

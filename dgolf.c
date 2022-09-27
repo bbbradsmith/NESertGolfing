@@ -1,11 +1,12 @@
 //
 // dgolf.c
-// NESert Golfing, by Brad Smith 2019
+// NESert Golfing, by Brad Smith 2019-2022
 // http://rainwarrior.ca
 //
 
+#define VERSION_STRING "1.5"
 const char rom_version[] = " ################  "
-	"NESert Golfing version 1.4 by Brad Smith, 2019"
+	"NESert Golfing version 1.5 by Brad Smith, 2022"
 	"  ################ ";
 
 // for debugging performance
@@ -43,11 +44,16 @@ typedef   signed long  int sint32;
 
 extern uint8* ptr;
 extern uint32 seed; // 24-bit random seed, don't set to 0
+extern uint32 seedw; // TE
+extern uint32 seedf; // TE
 extern uint8 i, j, k, l;
 extern uint16 mx,nx,ox,px;
 extern sint16 ux,vx;
+extern uint8 te; // TE non-zero if tournament edition active
 #pragma zpsym("ptr")
 #pragma zpsym("seed")
+#pragma zpsym("seedw")
+#pragma zpsym("seedf")
 #pragma zpsym("i")
 #pragma zpsym("j")
 #pragma zpsym("k")
@@ -58,6 +64,7 @@ extern sint16 ux,vx;
 #pragma zpsym("px")
 #pragma zpsym("ux")
 #pragma zpsym("vx")
+#pragma zpsym("te")
 
 extern uint8 input[16];
 extern uint8 input_flags;
@@ -74,10 +81,16 @@ extern sint8 mouse3;
 
 extern uint8 prng(); // 8-bit random value
 extern uint8 prng1(); // "fast" random value, only bit 0 is truly random (bits 1-7 have increasing entropy)
+extern uint8 prngw(); // TE dependent random generator for ongoing wind adjustment only
+extern uint8 prngw1(); // TE
+extern uint8 prngf(); // TE independent random generator for things that should still be random
+extern uint8 prngf1(); // TE
 extern void mouse_sense(); // cycles sensitivity setting (doesn't work on Hyperkin clone)
 extern void input_setup();
 extern void input_poll();
 extern void sound_play(const uint8* addr); // play a sound effect
+
+extern void te_switch(); // rendering off, reset and switch mode
 
 extern void ppu_latch(uint16 addr); // write address to PPU latch
 extern void ppu_direction(uint8 vertical); // set write increment direction
@@ -133,8 +146,10 @@ extern uint8 blend25(uint8 a, uint8 b); // best palette match of 75% a, 25% b
 
 extern uint8 layers_chr[];
 extern uint8 sprite_chr[];
+extern uint8 layerste_chr[];
 extern const uint16 LAYERS_CHR_SIZE;
 extern const uint16 SPRITE_CHR_SIZE;
+extern const uint16 LAYERSTE_CHR_SIZE;
 
 extern uint8 floor_column;
 extern uint8 weather_tile;
@@ -328,6 +343,15 @@ uint8 mouse_new;
 uint8 mouse_steady;
 sint8 mouse_sx;
 sint8 mouse_sy;
+
+// TE tournament edition
+
+uint16 holes;
+uint8 seed_pos;
+uint8 holes_pos;
+uint32 seed_start;
+extern uint16 holes;
+extern uint32 seed_start;
 
 //
 // sound effects
@@ -713,6 +737,11 @@ void hole_next()
 		if (hole == LAST_HOLE_TEST) hole = 0;
 	#endif
 
+	if (te) // TE configurable number of holes
+	{
+		if (hole == (holes & 0xFF)) hole = 0;
+	}
+
 	fg_hold_mask = course_hm[course];
 	fg_angle_mask = course_hm[course];
 	++course; if (course >= 18) course = 0;
@@ -793,9 +822,18 @@ void weather_fade_automask()
 
 void weather_wind_random()
 {
-	weather_wind_fade_dir = 1 - ((prng1() & 1) * 2); // 1 or -1, wind direction
-	weather_wind_fade_p = prng(); // wind strength
-	weather_wind_timeout = ((prng() & 15) + 32) * 64; // 30-50 seconds before wind changes
+	if (!te)
+	{
+		weather_wind_fade_dir = 1 - ((prng1() & 1) * 2); // 1 or -1, wind direction
+		weather_wind_fade_p = prng(); // wind strength
+		weather_wind_timeout = ((prng() & 15) + 32) * 64; // 30-50 seconds before wind changes
+	}
+	else
+	{
+		weather_wind_fade_dir = 1 - ((prngw1() & 1) * 2); // 1 or -1, wind direction
+		weather_wind_fade_p = prngw(); // wind strength
+		weather_wind_timeout = ((prngw() & 15) + 32) * 64; // 30-50 seconds before wind changes
+	}
 }
 
 void weather_fade()
@@ -932,6 +970,40 @@ const char title_text[] =
 	"\n"
 	"         Help";
 
+const char help_text_te[] =
+	"     NESert Golfing " VERSION_STRING "\n"
+	"   Brad Smith, 2019-2022\n"
+	"   http://rainwarrior.ca\n"
+	"\n"
+	"GAMEPAD CONTROL:\n"
+	"  Hold A to begin swing,\n"
+	"  use directions to aim,\n"
+	"  release to stroke.\n"
+	"  Hold B for fine control.\n"
+	"\n"
+	"MOUSE CONTROL:\n"
+	"  Hold left button to begin\n"
+	"  swing, drag to aim,\n"
+	"  release to stroke.\n"
+	"  Hold right button for\n"
+	"  fine control.\n"
+	"\n"
+	" NESert Golfing was derived\n"
+	"   from the original game\n"
+	"       Desert Golfing\n"
+	"   by Justin Smith, 2014.";
+
+const char title_text_te[] =
+	"         Play\n"
+	"\n"
+	"How many?   1  2  3  4\n"
+	"\n"
+	"     Seed:       \n"
+	"\n"
+	"      Holes:    \n"
+	"\n"
+	"         Help";
+
 #define MOUSE_STEADY_TIME 24
 #define MOUSE_STEADY_MOVE 12
 
@@ -988,6 +1060,10 @@ void help()
 		ppu_scroll_x(256);
 		frame();
 		new_poll();
+
+		// TE hold A, B or START when entering HELP screen and press SELECT to switch mode
+		if ((gamepad_new & PAD_SELECT) && (gamepad & (PAD_A | PAD_B | PAD_START))) te_switch();
+
 		if (gamepad_new || mouse_new) break;
 	}
 	
@@ -1004,6 +1080,19 @@ void help()
 
 	return;
 }
+
+const uint8 TITLE_NMT_TE[16*8] = { // TE
+	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x00, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+	0x20, 0x21, 0x22, 0x33, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
+	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x00, 0x3E, 0x3F,
+	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x00, 0x4E, 0x4F,
+	0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F,
+	0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F,
+	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F,
+	0x19, 0x23, 0x3D, 0x4D, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+};
+
+void menu_te(void); // forward
 
 void title()
 {
@@ -1075,37 +1164,68 @@ void title()
 	ppu_apply_direction(0);
 
 	// title
-	i = 16;
-	for (j=0; j<7; ++j)
+	if (!te)
 	{
-		ppu_latch(0x2000 + 8 + ((4+j) * 32));
-		for (k=0; k<16; ++k) { ppu_write(i); ++i; }
+		i = 16;
+		for (j=0; j<7; ++j)
+		{
+			ppu_latch(0x2000 + 8 + ((4+j) * 32));
+			for (k=0; k<16; ++k) { ppu_write(i); ++i; }
+		}
+		ppu_latch(0x2000 + (8+13) + ((4+7) * 32));
+		ppu_write(13);
+		ppu_write(14);
+		ppu_write(15);
 	}
-	ppu_latch(0x2000 + (8+13) + ((4+7) * 32));
-	ppu_write(13);
-	ppu_write(14);
-	ppu_write(15);
+	else
+	{
+		i = 0;
+		for (j=0; j<8; ++j)
+		{
+			ppu_latch(0x2000 + 8 + ((4+j) * 32));
+			for (k=0; k<16; ++k) { ppu_write(TITLE_NMT_TE[i]); ++i; }
+		}
+	}
 
 	// menu
 	ppu_latch(0x23C0 + 0 + (12*2));
 	ppu_fill(attribute(1,1,1,1),16);
-	ppu_fill(attribute(2,2,2,2),24);
-	ppu_text(title_text, 0x2000 + 5 + (15 * 32));
+	if (!te)
+	{
+		ppu_fill(attribute(2,2,2,2),24);
+		ppu_text(title_text, 0x2000 + 5 + (15 * 32));
+	}
+	else
+	{
+		ppu_fill(attribute(1,1,2,2),8);
+		ppu_fill(attribute(2,2,2,2),16);
+		ppu_text(title_text_te, 0x2000 + 5 + (13 * 32));
+	}
 
 	// help
 	ppu_latch(0x27C0 + 0 + (0*2));
 	ppu_fill(attribute(1,1,1,1),48);
 	ppu_fill(attribute(3,3,3,3),16);
-	ppu_text(help_text, 0x2400 + 2 + (3 * 32));
+	if (!te)
+		ppu_text(help_text, 0x2400 + 2 + (3 * 32));
+	else
+		ppu_text(help_text_te, 0x2400 + 2 + (2 * 32));
 
 	palette_generate(pal_sky, pal_floor, pal_text);
 
 	title_menu = 0;
+
 	ppu_scroll_x(0);
 	ppu_scroll_y(0);
 	palette[18] = 0x24;
 
-	while (1)
+	if (te)
+	{
+		seed_pos = 0;
+		holes_pos = 2;
+		menu_te();
+	}
+	else while (1)
 	{
 		#define MENU_Y0 (15*8)
 		#define MENU_Y1 (17*8)
@@ -1179,7 +1299,7 @@ void title()
 			if (i >= 0xD) i = 1;
 			palette[18] = 0x20 | i;
 		}
-	}
+	};
 
 	// prepare for game
 
@@ -1196,7 +1316,7 @@ void title()
 
 	// wipe existing text
 	for (i=0; i<64; ++i) ppu_send[i] = 0;
-	for (i=3; i<20; ++i)
+	for (i=3; i<(te ? 22 : 20); ++i)
 	{
 		ppu_send_addr = 0x2000 + (32 * i);
 		frame_double();
@@ -1218,6 +1338,16 @@ void title()
 	ppu_send_addr = 0x27C0;
 	ppu_send_count = 64;
 	frame();
+	
+	// TE apply starting seed
+	if (te)
+	{
+		seed = seed_start;
+		for (i=0; i<8; ++i) prng(); // prime the RNG a little to increase "distance" from starting seed
+		seedw = seed;
+		transition_time = prng() & 3; // give it a slightly low value to encourage the seed to affect the landscape quickly
+		day = prng() & 7;
+	}
 
 	// create first tee (flat ground)
 	hole_cx = 256;
@@ -1266,6 +1396,178 @@ void title()
 	ball_draw_setup();
 
 	return; // hole_play()
+}
+
+void seed_start_up() // TE
+{
+	j = 20 - (seed_pos * 4);
+	i = (seed_start >> j) & 0xF;
+	seed_start &= (0xFFFFFFFFUL ^ (0xFUL << j));
+	i = (i+1) & 0xF;
+	seed_start |= ((uint32)i) << j;
+}
+
+void seed_start_down() // TE
+{
+	j = 20 - (seed_pos * 4);
+	i = (seed_start >> j) & 0xF;
+	seed_start &= (0xFFFFFFFFUL ^ (0xFUL << j));
+	i = (i-1) & 0xF;
+	seed_start |= ((uint32)i) << j;
+}
+
+const uint16 HOLES_INC[3] = { 100, 10, 1 }; // TE
+
+void menu_te() // TE has different menu
+{
+	while (1)
+	{
+		#undef MENU_Y0
+		#undef MENU_Y1
+		#undef MENU_Y2
+		#define MENU_Y0 (13*8)
+		#define MENU_Y1 (15*8)
+		#define MENU_Y2 (17*8)
+		#define MENU_Y3 (19*8)
+		#define MENU_Y4 (21*8)
+		#define MENU_X0 (12*8)
+		#define MENU_X1 (19*8)
+		#define MENU_XP1 ((16-3)*8)
+		#define MENU_XS0 (16*8)
+		#define MENU_XH0 (18*8)
+		#define TITLE_OPTS 5
+
+		palette[22] = BALL_COLOUR[players-1];
+		i = (frame_count / 8) & 3;
+		if (i == 0) i = 2;
+		palette[22] |= i << 4;
+
+		palette[23] = palette[1]; // use text color for seed/holes number sprites
+
+		sprite_begin();
+
+		if (title_menu == 0 || title_menu == 4)
+		{
+			uint8 i = title_menu==0 ? MENU_Y0 : MENU_Y4;
+			sprite_add(0x3A, MENU_X0,i,0x00);
+			sprite_add(0x3A, MENU_X1,i,0x40);
+		}
+		else if (title_menu == 2)
+		{
+			sprite_add(0x3B, MENU_XS0+(seed_pos*8), MENU_Y2-8,0x00);
+			sprite_add(0x3B, MENU_XS0+(seed_pos*8), MENU_Y2+7,0x80);
+		}
+		else if (title_menu == 3)
+		{
+			sprite_add(0x3B, MENU_XH0+(holes_pos*8), MENU_Y3-8,0x00);
+			sprite_add(0x3B, MENU_XH0+(holes_pos*8), MENU_Y3+7,0x80);
+		}
+		if (title_menu != 1)
+		{
+			palette[22] = (palette[22] & 0x0F) | 0x10; // darken, not selected
+		}
+		sprite_add(0x3A, MENU_XP1+(players*24), MENU_Y1, 0x01);
+		sprite_add(0x3A, MENU_XP1+16+(players*24), MENU_Y1, 0x41);
+
+		// TE: numbers
+		// hex dump of seed
+		for (i=0; i<24; i+=4)
+		{
+			j = (seed_start >> i) & 0x0F;
+			sprite_add(j, MENU_XS0+(5*8)-(i*2), MENU_Y2, 0x01);
+		}
+		// decimal holes count
+		mx = holes;
+		if      (holes >= 200) { sprite_add(2, MENU_XH0+0, MENU_Y3, 0x01); mx -= 200; }
+		else if (holes >= 100) { sprite_add(1, MENU_XH0+0, MENU_Y3, 0x01); mx -= 100; }
+		j = 0;
+		i = mx & 0xFF; // guaranteed to be < 100
+		while (i >= 10)
+		{
+			++j;
+			i -= 10;
+		} // j = 10s digit
+		if (holes >= 100 || j > 0) { sprite_add(j, MENU_XH0+8, MENU_Y3, 0x01); };
+		sprite_add(i, MENU_XH0+16, MENU_Y3, 0x01);
+
+		sprite_end();
+
+		frame();
+		new_poll();
+
+		switch (title_menu)
+		{
+		default:
+			title_menu=0; // failsafe?
+		case 0:
+			if ((mouse_new & MOUSE_L) || (gamepad_new & (PAD_START | PAD_A | PAD_B))) return;
+			if (mouse_new & MOUSE_R) players = (players & 3) + 1;
+			if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+			if ((gamepad_new & PAD_UP) || mouse_sy < 0) title_menu = TITLE_OPTS-1;
+			break;
+		case 1:
+			if (gamepad_new & PAD_START) return;
+			if ((mouse_new & (MOUSE_L | MOUSE_R)) || (gamepad_new & (PAD_A | PAD_RIGHT)) || mouse_sx > 0) players = (players & 3) + 1;
+			if ((gamepad_new & PAD_LEFT) || mouse_sx < 0) players = ((players + 2) & 3) + 1;
+			if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+			if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
+			break;
+		case 2:
+			if (gamepad_new & PAD_START) return;
+			if ((mouse1 & (MOUSE_L | MOUSE_R)) || (gamepad & (PAD_A | PAD_B)))
+			{
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0) seed_start_up();
+				if ((gamepad_new & PAD_DOWN) || mouse_sy > 0) seed_start_down();
+			}
+			else
+			{
+				if ((gamepad_new & PAD_RIGHT) || mouse_sx > 0) { seed_pos += 1; if (seed_pos >= 6) seed_pos = 0; }
+				if ((gamepad_new & PAD_LEFT) || mouse_sx < 0) { if (seed_pos > 0) --seed_pos; else seed_pos = 5; }
+				if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
+			}
+			break;
+		case 3:
+			if (gamepad_new & PAD_START) return;
+			if ((mouse1 & (MOUSE_L | MOUSE_R)) || (gamepad & (PAD_A | PAD_B)))
+			{
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0)
+				{
+					holes += HOLES_INC[holes_pos];
+					if (holes > 256) holes = 256;
+				}
+				if ((gamepad_new & PAD_DOWN) || mouse_sy > 0)
+				{
+					if (holes >= HOLES_INC[holes_pos]) holes -= HOLES_INC[holes_pos];
+					if (holes < 2) holes = 2;
+				}
+			}
+			else
+			{
+				if ((gamepad_new & PAD_RIGHT) || mouse_sx > 0) { holes_pos += 1; if (holes_pos >= 3) holes_pos = 0; }
+				if ((gamepad_new & PAD_LEFT) || mouse_sx < 0) { if (holes_pos > 0) --holes_pos; else holes_pos = 2; }
+				if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) ++title_menu;
+				if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
+			}
+			break;
+		case 4:
+			if ((mouse_new & MOUSE_L) || (gamepad_new & (PAD_START | PAD_A | PAD_B))) help();
+			if (mouse_new & MOUSE_R) players = (players & 3) + 1;
+			if ((gamepad_new & (PAD_DOWN | PAD_SELECT)) || mouse_sy > 0) title_menu=0;
+			if ((gamepad_new & PAD_UP) || mouse_sy < 0) --title_menu;
+			break;
+		}
+
+		//prng(); // build up entropy, not desired for TE
+		
+		// colour cycle the cursor
+		if (!(frame_count & 7))
+		{
+			i = (palette[18] & 0x0F) + 1;
+			if (i >= 0xD) i = 1;
+			palette[18] = 0x20 | i;
+		}
+	}
 }
 
 //
@@ -1629,7 +1931,7 @@ void hole_play()
 		do
 		{
 			input_poll();
-			prng1(); // entropy
+			if (!te) prng1(); // entropy
 			hole_draw();
 			frame();
 			#if HOLE_SKIP
@@ -1683,7 +1985,7 @@ void hole_play()
 			if (swing_y >  SWING_MAX) swing_y =  SWING_MAX;
 			if (swing_y < -SWING_MAX) swing_y = -SWING_MAX;
 			
-			prng1(); // entropy
+			if (!te) prng1(); // entropy
 			hole_draw();
 			frame();
 		}
@@ -1879,9 +2181,19 @@ void hole_play()
 			goto collide_done;
 
 		collide_skip:
-			// apply wind only if not colliding or on ground
-			if (weather_rate_min && (prng1() < weather_wind_p))
-				ball_vx += weather_wind_dir * WIND;
+			if (!te)
+			{
+				// apply wind only if not colliding or on ground
+				if (weather_rate_min && (prng1() < weather_wind_p))
+					ball_vx += weather_wind_dir * WIND;
+			}
+			else
+			{
+				// TE: uses "free" prngf because this is supposed to be a statistical chance of wind curving the ball,
+				//     and prngw is only for deciding wind patterns at a higher level
+				if (weather_rate_min && (prngf1() < weather_wind_p))
+					ball_vx += weather_wind_dir * WIND;
+			}
 		
 		collide_done:
 			// rolling/wobble, tick it whenever the ball moves a pixel
@@ -1996,6 +2308,8 @@ void hole_play()
 	// 7. prepare next hole
 	hole_next();
 
+	if (te) seedw = seed; // TE: re-synchronize the wind RNG at every hole
+
 	if (day) --day;
 
 	if (day == 0)
@@ -2048,22 +2362,38 @@ void main()
 {
 	//fmult_test();
 
-	// replace the common "all 0s" or "all 1s" emulator RAM initialization seed
-	// with two hand-picked cases to make the title screen look nice.
-	// (further entropy for subsequent holes is gathered while waiting on the
-	// title screen, but I have to generate at least the title screen before user input.)
-	if (seed == 0x00800000) seed = 0x00654321; // field set 7 (yellow day), 4 holes to night
-	if (seed == 0x00FFFFFF) seed = 0x000D7755; // field set F (yellow night), 4 holes to day
-	if (seed == 0x00FF0000) seed = 0x00654399; // field set 7 (yellow day), 5 holes to night
+	if (!te)
+	{
+		// replace the common "all 0s" or "all 1s" emulator RAM initialization seed
+		// with two hand-picked cases to make the title screen look nice.
+		// (further entropy for subsequent holes is gathered while waiting on the
+		// title screen, but I have to generate at least the title screen before user input.)
+		if (seed == 0x00800000) seed = 0x00654321; // field set 7 (yellow day), 4 holes to night
+		if (seed == 0x00FFFFFF) seed = 0x000D7755; // field set F (yellow night), 4 holes to day
+		if (seed == 0x00FF0000) seed = 0x00654399; // field set 7 (yellow day), 5 holes to night
+	}
+	else // TE
+	{
+		seed = 0x00456321; // yellow, day
+		seedw = seed; // weather PRNG will be reloaded from main PRNG at sync points
+		seedf = seed; // any nonzero value is find for free PRNG
+
+		// settings should persist across reset
+		if (holes < 2 || holes > 256 || ((seed_start >> 24) != 42))
+		{
+			holes = 100;
+			seed_start = 0x00123456 | (42UL << 24);
+		}
+	}
 
 	input_setup();
 
 	ppu_latch(0x1000);
 	ppu_fill(0x55,8*1024);
 
-	ptr = layers_chr;
+	ptr = te ? layerste_chr : layers_chr;
 	ppu_latch(0x0000);
-	ppu_load(LAYERS_CHR_SIZE);
+	ppu_load(te ? LAYERSTE_CHR_SIZE : LAYERS_CHR_SIZE);
 
 	ptr = sprite_chr;
 	ppu_latch(0x1000);

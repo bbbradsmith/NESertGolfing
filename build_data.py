@@ -116,7 +116,8 @@ def byte_table(t, width = 16):
 # output filenames
 #
 
-layerout = "layers.chr"
+layersout = "layers.chr"
+layersteout = "layerste.chr"
 spriteout = "sprite.chr"
 slopeout = "temp\\slopes.inc"
 
@@ -127,18 +128,23 @@ slopeout = "temp\\slopes.inc"
 pal1bit = [(0,0,0),(255,255,255)]
 pal2bit = [(0,0,0),(0x65,0x66,0x65),(0xb0,0xb1,0xb0),(255,255,255)]
 
-layer1 = index_image("layer1.png",pal1bit)
-layer2 = index_image("layer2.png",pal1bit)
-sprite = index_image("sprite.png",pal2bit)
+layer1   = index_image("layer1.png",pal1bit)
+layer2   = index_image("layer2.png",pal1bit)
+sprite   = index_image("sprite.png",pal2bit)
+layer1te = index_image("layer1te.png",pal1bit)
 
 # Test of print_img
 #print_img(layer1)
 #print_img(layer2)
 #print_img(sprite)
 
-layer_chr = layer_chr(make_chr(layer1),make_chr(layer2))[0]
-open(layerout,"wb").write(bytes(layer_chr))
-print(layerout + " -> %d bytes" % len(layer_chr))
+layers_chr = layer_chr(make_chr(layer1),make_chr(layer2))[0]
+open(layersout,"wb").write(bytes(layers_chr))
+print(layersout + " -> %d bytes" % len(layers_chr))
+
+layerste_chr = layer_chr(make_chr(layer1te),make_chr(layer2))[0]
+open(layersteout,"wb").write(bytes(layerste_chr))
+print(layersteout + " -> %d bytes" % len(layerste_chr))
 
 sprite_chr = make_chr(sprite)
 open(spriteout,"wb").write(bytes(sprite_chr))
