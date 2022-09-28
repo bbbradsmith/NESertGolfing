@@ -257,8 +257,7 @@ snes_init:
 	sta a:$212D ; TS BG1
 	lda #$01
 	sta a:$2105 ; BGMODE mode 1
-	; default increment on $2118
-	stz a:$2115
+	stz a:$2115 ; VMAIN default increment on $2118
 	; begin
 	lda #$81
 	sta a:$4200 ; NMITIMEN turn on NMI
@@ -350,7 +349,7 @@ snes_nmi:
 @post_on:
 	; set horizontal scroll
 	lda a:ppu_2005x
-	sta a:2111 ; BG3HOFS
+	sta a:$2111 ; BG3HOFS
 	lda a:ppu_2000
 	and #1
 	sta a:$2111
@@ -759,11 +758,163 @@ snes_ppu_fill: ; ptr1=addr, ptr2=count, tmp1=data
 	.i8
 	rtl
 
+snes_redirect_att: ; A16=addr in attribute area, returns adjusted address, clobbers ptr3
+	.a16
+	pha
+	and #$FC00 ; preserve nametable
+	sta z:ptr3
+	pla
+	and #$03FF
+	sec
+	sbc #$03C0 ; attribute address starts at $3C0
+	asl
+	asl
+	asl
+	asl
+	ora z:ptr3 ; nametable + (attribute address * 16)
+	rts
+	.a8
+
+snes_repack_att: ; A=count (multiple of 8, range 8-64), _ppu_send=data, clobbers tmp1,tmp2,ptr3,ptr4
+	phb
+	lsr
+	lsr
+	lsr
+	pha
+	sta z:tmp1 ; tmp1 = row count
+	lda #^@remap
+	pha
+	plb
+	rep #$10
+	.i16
+	ldx #0
+	txa
+	xba ; clear high byte of A (will transfer to Y below)
+	stx z:ptr4 ; ptr4 = Y
+@row:
+	lda #8
+	sta z:tmp2 ; tmp2 = tile count
+	:
+		ldy z:ptr4
+		lda a:_ppu_send, Y
+		iny
+		sty z:ptr4
+		pha
+		and #3
+		tay
+		lda a:@remap, Y
+		sta a:snes_repack+0, X
+		sta a:snes_repack+1, X
+		pla
+		pha
+		and #(3<<2)
+		tay
+		lda a:@remap, Y
+		sta a:snes_repack+2, X
+		sta a:snes_repack+3, X
+		pla
+		pha
+		and #(3<<4)
+		tay
+		lda a:@remap, Y
+		sta a:snes_repack+64, X
+		sta a:snes_repack+65, X
+		pla
+		and #(3<<6)
+		tay
+		lda a:@remap, Y
+		sta a:snes_repack+66, X
+		sta a:snes_repack+67, X
+		inx
+		inx
+		inx
+		inx
+		dec z:tmp2 ; next tile
+		bne :-
+	rep #$20
+	.a16
+	txa
+	clc
+	adc #96 ; skip 3 rows
+	tax
+	lda #0 ; clear high byte again
+	sep #$20
+	.a8
+	dec z:tmp1 ; next row
+	bne @row
+	; double rows
+	pla
+	asl
+	sta z:ptr3+0 ; ptr3 = doubled row count (16-bit)
+	stz z:ptr3+1
+	rep #$30
+	.a16
+	.i16
+	ldx #.loword(snes_repack)
+	ldy #.loword(snes_repack)+32
+	clc
+	:
+		lda #32-1
+		;mvn #^*,#^* ; note: clobbers data bank
+		.byte $54, ^$80, ^$80 ; ca65 MVN syntax pre-V2.18 is inconsistent, doing it manually
+		tya
+		tax
+		adc #32
+		tay
+		dec z:ptr3 ; next row
+		bne :-
+	; return
+	sep #$30
+	plb
+	.a8
+	.i8
+	rts	
+@remap: ; remaps low 1 bit of attribute to tile select, and low 2 bits of attribute to palette
+.repeat 256, I
+	.byte (((I<<2)|I|(I>>2)|(I>>4))&$0C) | ((I|(I>>2)|(I>>4)|(I>>6))&$01)
+.endrepeat
+
 snes_ppu_fill_att: ; ptr1=addr, ptr2=count, tmp1=data
-	; TODO
+	; copy to _ppu_send temporarily
+	ldx #0
+	lda z:tmp1
+	:
+		sta _ppu_send, X
+		inx
+		cpx z:ptr2+0
+		bcc :-
+	; repack attributes
+	lda z:ptr2+0
+	jsr snes_repack_att
+	; send
+	rep #$20
+	.a16
+	asl z:ptr2
+	asl z:ptr2
+	asl z:ptr2
+	asl z:ptr2 ; count *= 16
+	lda z:ptr1
+	jsr snes_redirect_att
+	sta a:$2116 ; VMADD
+	sep #$20
+	rep #$10
+	.a8
+	.i16
+	lda #$80
+	sta a:$2115 ; VMAIN increment on $2119
+	ldx #0
+:
+	lda snes_repack, X
+	sta a:$2119 ; VMDATAH
+	inx
+	cpx Z:ptr2
+	bcc :-
+	sep #$10
+	.i8
+	stz a:$2115 ; VMAIN default increment on $2118
 	rtl
 
-snes_ppu_apply: ; note: not used for attribute or OBJ CHR
+snes_ppu_apply: ; note: not used for OBJ CHR
 	; TODO
 	rtl
 .if 0

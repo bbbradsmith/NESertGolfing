@@ -1945,7 +1945,12 @@ cc65_init:
 .segment "CODE"
 
 sound_update_long:
+	phb
+	lda #$80 ; ensure correct bank for sound data
+	pha
+	plb
 	jsr sound_update
+	plb
 	rtl
 
 ;void snes_ppu_load_chr(uint16 addr, uint16 count)
