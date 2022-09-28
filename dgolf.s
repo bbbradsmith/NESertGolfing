@@ -97,9 +97,9 @@ temp: .res 4
 .segment "STACK"
 sound:           .res 2
 ppu_2000:        .res 1
-ppu_2001:        .res 1
+;ppu_2001:        .res 1
 ppu_2005x:       .res 2 ; second byte is high bit (redundant in $2000)
-ppu_2005y:       .res 2 ; second byte is high bit (redundant in $2000)
+;ppu_2005y:       .res 2 ; second byte is high bit (redundant in $2000)
 _ppu_send_addr:  .res 2
 _ppu_send_count: .res 1
 _ppu_send:       .res 64
@@ -195,6 +195,8 @@ _oam: .res 256
 .export sound_update_long : far
 
 .exportzp ppu_post_mode
+.export ppu_2000 : abs
+.export ppu_2005x : abs
 .export nes_apu : abs
 
 .segment "SNESRAM"
@@ -1270,8 +1272,7 @@ apu_init:
 .macro APU_OUT_RESET addr
 	.assert (addr >= $4000 && addr < $4010), error, "APU_OUT_RESET parameter range: $4000-$400F"
 	lda apu_init + (addr - $4000)
-	;sta apu_out + (addr - $4000)
-	sta nes_apu + (addr - $4000) ; SNES
+	sta apu_out + (addr - $4000)
 .endmacro
 
 .segment "CODE"
@@ -1344,13 +1345,13 @@ _sound_play:
 sound_init:
 	; initialize APU in a specific order
 	lda #0
-	sta $4015 ; silence/reset all channels
+	sta nes_apu+$15 ;sta $4015 ; silence/reset all channels
 	APU_INIT $4000 ; constant volume 0 / halt all channels before enabling any
 	APU_INIT $4004
 	APU_INIT $400C
 	APU_INIT $4008
 	lda #%00001111
-	sta $4015 ; turn on 4 channels (not DMC)
+	sta nes_apu+$15 ;sta $4015 ; turn on 4 channels (not DMC)
 	APU_INIT $4001 ; disable sweep
 	APU_INIT $4005
 	APU_INIT $4002 ; low frequency
@@ -1370,7 +1371,7 @@ sound_init:
 		bcc :-
 	lda #0
 	:
-		sta $4000, X ; 0 to DMC registers
+		sta nes_apu, X ;sta $4000, X ; 0 to DMC registers
 		inx
 		cpx #$14
 		bcc :-
@@ -1494,7 +1495,7 @@ sound_deliver_apu:
 	lda apu_out+7
 	cmp apu_sqh+1 ; prevent phase reset
 	beq :+
-		sta $4007
+		sta nes_apu+$07 ;sta $4007
 		sta apu_sqh+1
 	:
 	APU_COPY $4006
@@ -1503,7 +1504,7 @@ sound_deliver_apu:
 	lda apu_out+3
 	cmp apu_sqh+0 ; prevent phase reset
 	beq :+
-		sta $4003
+		sta nes_apu+$03 ; sta $4003
 		sta apu_sqh+0
 	:
 	APU_COPY $4002
@@ -1522,7 +1523,7 @@ sound_deliver_apu:
 ;.export _ppu_fill
 ;.export _ppu_mask
 .export _ppu_scroll_x
-.export _ppu_scroll_y
+;.export _ppu_scroll_y
 .export _ppu_post
 ;.export _ppu_profile
 ;.export _ppu_apply_direction
@@ -1568,22 +1569,6 @@ _ppu_scroll_x:
 	pha
 	lda ppu_2000
 	and #%11111110
-	sta ppu_2000
-	pla
-	ora ppu_2000
-	sta ppu_2000
-	rts
-
-_ppu_scroll_y:
-	; A:X = scroll
-	sta ppu_2005y+0
-	txa
-	and #1
-	sta ppu_2005y+1
-	asl
-	pha
-	lda ppu_2000
-	and #%11111101
 	sta ppu_2000
 	pla
 	ora ppu_2000
@@ -1898,7 +1883,7 @@ reset:
 		sta $0100, X
 		inx
 		bne :-
-	lda #$FF
+	lda #$F0 ; SNES offscreen
 	:
 		sta _oam, X
 		inx

@@ -99,7 +99,7 @@ extern void ppu_write(uint8 value); // write value to $2007
 //extern void ppu_fill(uint8 value, uint16 count); // uploads single value to $2007
 //extern void ppu_mask(uint8 v); // $2001, applies at next post
 extern void ppu_scroll_x(uint16 x);
-extern void ppu_scroll_y(uint16 y);
+//extern void ppu_scroll_y(uint16 y);
 extern void ppu_post(uint8 mode); // waits for next frame and posts PPU update
 //extern void ppu_profile(uint8 emphasis); // immediate $2001 write, OR with current mask (use bit 0 for greyscale)
 //extern void ppu_apply_direction(uint8 vertical); // immediately set write increment direction
@@ -606,7 +606,7 @@ void sprite_end()
 	//while (oam_pos != 0)
 	while (oam_pos < (32*4)) // leaves last 32 for weather
 	{
-		oam[oam_pos] = 0xFF;
+		oam[oam_pos] = 0xF0; // SNES offscreen
 		oam_pos += 4;
 	}
 }
@@ -1230,7 +1230,7 @@ void title()
 	title_menu = 0;
 
 	ppu_scroll_x(0);
-	ppu_scroll_y(0);
+	//ppu_scroll_y(0);
 	palette[18] = 0x24;
 
 	if (te)
@@ -2404,7 +2404,8 @@ void main()
 
 	//ppu_latch(0x1000);
 	//ppu_fill(0x55,8*1024);
-	snes_ppu_fill(0x1000,0x55,8*1024);
+	snes_ppu_fill(0x0000,0x55,4*1024);
+	snes_ppu_fill(0x1000,0x55,4*1024);
 
 	ptr = te ? layerste_chr : layers_chr;
 	//ppu_latch(0x0000);

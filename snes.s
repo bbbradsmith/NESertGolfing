@@ -23,6 +23,13 @@
 .importzp tmp1, tmp2, tmp3, tmp4 ; cc65 temporaries
 
 .import nes_apu : abs
+.import ppu_2000 : abs
+.import ppu_2005x : abs
+.import _ppu_send_addr : abs
+.import _ppu_send_count : abs
+.import _ppu_send : abs
+.import _palette : abs
+.import _oam : abs
 
 .import sound_update_long : far
 
@@ -42,11 +49,25 @@ VRAM_NMT_BG1 = $2800
 VRAM_CHR_BG1 = $3000
 VRAM_CHR_OBJ = $4000
 
+.segment "ZEROPAGE"
+
+snes_post_mode: .res 1
+
 .segment "SNESRAM"
 
 snes_repack:    .res 1024      ; buffer for repacking attributes/CHR
 snes_palette:   .res 512       ; buffer for translated palettes
+snes_oam:       .res 256       ; buffer for translated oam
 hdma_gradient:  .res (2*240)+3 ; Colour 0 gradient
+
+.enum
+	POST_OFF    = 1
+	POST_NONE   = 2
+	POST_UPDATE = 3
+	POST_DOUBLE = 4
+	; added
+	; TODO
+.endenum
 
 .segment "SNES"
 
@@ -126,47 +147,49 @@ snes_reset:
 	lda #$80
 	pha
 	plb
-	; clear VRAM with DMA
-	stz a:2116
-	stz a:2117
-	lda #%00001001 ; 2-to-2, no increment
-	sta a:$4300
-	lda #$18 ; $2118-9 VMDATA
-	sta a:$4301
-	lda #<@bin_00
-	sta a:$4302
-	lda #>@bin_00
-	sta a:$4303
-	lda #^@bin_00
-	sta a:$4304
-	stz a:$4305
-	stz a:$4306 ; 64k
-	lda #1
-	sta a:$420B
-	; clear CGRAM with DMA
-	stz a:$2121 ; CGADD
-	lda #%00001010 ; 2-to-1, no increment
-	sta a:$4300
-	lda #$22 ; $2122 CGDATA
-	sta a:$4301
-	stz a:$4305
-	lda #>512
-	sta a:$4306 ; 512 bytes
-	lda #1
-	sta a:$420B
+	rep #$20
+	.a16
 	; clear OAM with DMA
 	stz a:$2012
-	stz a:$2103
-	lda #%00001000 ; 1-to-1, no increment
-	sta a:$4300
-	lda #$04 ; $2104 OAMDATA
-	sta a:$4301
-	lda #<(512+32)
-	sta a:$4305
-	lda #>(512+32)
-	sta A:$4306 ; 512+32 bytes
-	lda #1
-	sta a:$420B
+	ldx #%00001010 ; 2-to-1, no increment
+	stx a:$4300
+	ldx #$04 ; $2104 OAMDATA
+	stx a:$4301
+	lda #.loword(@bin_F0)
+	sta a:$4302
+	ldx #^*
+	stx a:$4304
+	sty a:$4305
+	ldx #>512
+	stx a:$4306 ; 512 bytes $F0
+	ldx #1
+	stx a:$420B
+	lda #.loword(@bin_00)
+	sta a:$4302
+	lda #32
+	sta a:$4305 ; 32 bytes $00
+	stx a:$420B
+	; clear CGRAM with DMA
+	ldy #0
+	stx a:$2121 ; CGADD = 0
+	ldx #$22 ; $2122 CGDATA
+	stx a:$4301
+	sty a:$4305
+	ldx #>512
+	stx a:$4306 ; 512 bytes
+	ldx #1
+	stx a:$420B
+	; clear VRAM with DMA
+	stz a:2116 ; VMADD
+	ldx #%00001001 ; 2-to-2, no increment
+	stx a:$4300
+	ldx #$18 ; $2118-9 VMDATA
+	stx a:$4301
+	stz a:$4305 ; 64k
+	ldx #1
+	stx a:$420B
+	sep #$20
+	.a8
 	; upload SPC program and return
 	jsr spc_reset
 	rtl
@@ -187,6 +210,8 @@ snes_reset:
 	.byte $FF ; end
 @bin_00:
 	.byte $00
+@bin_F0:
+	.byte $F0
 
 snes_init:
 	.a8
@@ -208,21 +233,21 @@ snes_init:
 	sta a:$2124 ; W23SEL
 	lda #%00000010
 	sta a:$2125 ; WOBJSEL enable window 1 for OBJ
-	lda #8
+	lda #0
 	sta a:$2126 ; WH0 window 1 left
-	lda #255
+	lda #7
 	sta a:$2127 ; WH1 window 1 right
 	stz a:$212A ; WBGLOG OR logic
 	stz a:$212B ; WOBJLOG OR logic
-	lda #%0001111
+	lda #%00011111
 	sta a:$212E ; TMW apply windows to all layers
 	sta a:$212F ; TSW
 	; subtractive colour math for BG1
-	lda #%11110010
-	sta a:$2130 ; CGWSEL subscreen everwhere
+	lda #%00000010
+	sta a:$2130 ; CGWSEL subscreen
 	lda #%10000100
 	; TODO enable
-	;sta a:$2131 ; CGADSUB subtract from BG3 only
+	sta a:$2131 ; CGADSUB subtract from BG3 only
 	; global screen settings
 	lda #$04
 	sta a:$2133 ; SETINI overscan 239 lines mode
@@ -242,15 +267,105 @@ snes_init:
 snes_nmi:
 	.a8
 	.i8
+	lda z:snes_post_mode
+	stz z:snes_post_mode
+	stz z:ppu_post_mode
+	bne :+
+		jmp @end
+	:
+	cmp #POST_NONE
+	bne :+
+		jmp @post_on
+	:
+	cmp #POST_UPDATE
+	beq @post_update
+	cmp #POST_DOUBLE
+	beq @post_double
+	; otherwise POST_OFF
+@post_off:
+	lda #$8F
+	sta a:$2100 ; INIDISP screen off
+	jmp @end
+@post_update: ; 32 linear bytes
+	jsr @post_common
+	; TODO
+	stz a:_ppu_send_count
+	jmp @post_on
+@post_double: ; 64 linear bytes
+	jsr @post_common
+	; TODO
 	; TODO NES NMI stuff, see below
 	; types of data:
 	; - nametable (1 or 2 rows)
 	; - vertical nametable ?
 	; - attribute (64 bytes)
 	; - CHR 64 bytes?
+	stz a:_ppu_send_count
+	jmp @post_on
+@post_common:
+	rep #$20
+	.a16
+	; OAM DMA
+	stz a:$2102 ; OAMADD
+	ldx #%00000010 ; 1-to-2
+	stx a:$4300
+	ldx #$04 ; $2104 OAMDATA
+	stx a:$4301
+	lda #.loword(snes_oam)
+	sta a:$4302
+	ldx #^snes_oam
+	stx a:$4304
+	lda #256
+	sta a:$4305
+	ldx #1
+	stx a:$420B ; DMA
+	; palette DMAs
+	; common setup
+	ldx #$22 ; $2122 CGDATA
+	stx a:$4301
+	ldx #^snes_palette
+	stx a:$4304
+	stz a:$4305
+	; BG3 palettes + BG1
+	ldx #0
+	stx a:$2121 ; CGADD = 0
+	lda #.loword(snes_palette)
+	sta a:$4302
+	ldx #32*2
+	stx a:$4305 ; 32 colours
+	ldx #1
+	stx a:$420B
+	; OBJ palettes
+	ldx #128
+	stx a:$2121 ; CGADD = 128
+	lda #.loword(snes_palette+(128*2))
+	sta a:$4302
+	ldx #64*2
+	stx a:$4305 ; 64 colours
+	ldx #1
+	stx a:$420B
+	sep #$20
+	.a8
+	rts
+@post_on:
+	; set horizontal scroll
+	lda a:ppu_2005x
+	sta a:2111 ; BG3HOFS
+	lda a:ppu_2000
+	and #1
+	sta a:$2111
+	lda a:ppu_2005x
+	sta a:$210D ; BG1HOFS
+	lda a:ppu_2000
+	and #1
+	sta a:$210D
+	; TODO set up HDMA?
+	lda #$0F
+	sta a:$2100 ; INIDISP screen on
+	stz z:ppu_post_mode
 @end:
-	;jsl sound_update_long ; updates nes_apu
-	;jsr spc_update
+	jsl sound_update_long ; updates nes_apu
+	jsr spc_update
 	rtl
 
 ; TODO delete this as we replace it
@@ -504,6 +619,10 @@ snes_pal1: ; 0bbbbbgg
 	.byte $5A,$75,$7C,$7C,$64,$30,$00,$01,$01,$01,$01,$1D,$4D,$00,$00,$00
 	.byte $7F,$7E,$7E,$7E,$7D,$69,$2E,$0A,$02,$02,$0F,$37,$67,$25,$00,$00
 	.byte $7F,$7F,$7F,$7F,$7F,$7B,$63,$53,$4B,$47,$53,$63,$77,$5E,$00,$00
+snes_oam_convert: ; vhp...cc -> vhPP0cc0 (duplicate+negate priority bit, select OBJ page 0)
+	.repeat 256, I
+		.byte ((I & $E0) | ((I>>1) & $10) | ((I & $03) << 1) | $00) ^ $30
+	.endrepeat
 
 snes_ppu_load_chr: ; ptr1=addr, ptr2=count, _ptr=data
 	.a8
@@ -531,7 +650,7 @@ snes_ppu_load_chr: ; ptr1=addr, ptr2=count, _ptr=data
 	.a8
 	.i8
 	rtl
-@bg_chr: ; splits 8+8 byte planes across $0000 and $1000
+@bg_chr: ; splits 8+8 byte planes across $0000 and $0800
 	.a16
 	.i16
 	lda z:ptr1
@@ -548,8 +667,7 @@ snes_ppu_load_chr: ; ptr1=addr, ptr2=count, _ptr=data
 	rep #$20
 	.a16
 	lda z:ptr1
-	clc
-	adc #$1000
+	eor #$0800
 	sta a:$2116 ; VMADD
 	sep #$20
 	.a8
@@ -565,10 +683,15 @@ snes_ppu_load_chr: ; ptr1=addr, ptr2=count, _ptr=data
 	clc
 	adc #8
 	sta z:ptr1 ; addr += 8
+	lda z:_ptr
+	clc
+	adc #16
+	sta z:_ptr ; ptr += 16
 	lda z:ptr2
 	sec
 	sbc #16
-	bcs :+
+	beq :+
+	bcc :+
 	sta z:ptr2 ; count -= 16
 	bra @bg_chr
 :
@@ -621,7 +744,7 @@ snes_ppu_fill: ; ptr1=addr, ptr2=count, tmp1=data
 	rep #$20
 	.a16
 	lda z:ptr1
-	ora #$1000
+	eor #$0800
 	sta a:$2116 ; VMADD
 	ldx z:ptr2
 	sep #$20
@@ -666,12 +789,64 @@ snes_ppu_apply: ; note: not used for attribute or OBJ CHR
 	rts
 .endif
 
+.macro PALETTE_TRANSLATE n_, s_
+	ldx _palette+(n_)
+	lda snes_pal0, X
+	sta snes_palette+((s_)*2)+0
+	lda snes_pal1, X
+	sta snes_palette+((s_)*2)+1
+.endmacro
+
 snes_ppu_post:
 	lda z:ppu_post_mode
 	bne :+
 		rtl
 	:
-	; TODO translate PPU update, palettes, CHR unpacking, etc.
-	; build HDMA gradient?
+	; translate palettes
+	phb
+	lda #^snes_pal0
+	pha
+	plb
+	PALETTE_TRANSLATE  0,  0
+	; BG is really 1bpp, only needs 1 colour per palette
+	PALETTE_TRANSLATE  0+1,  0+1
+	PALETTE_TRANSLATE  4+2,  4+1
+	PALETTE_TRANSLATE  8+1,  8+1
+	PALETTE_TRANSLATE 12+2, 12+1
+	; OBJ translates 21 to 0201
+	PALETTE_TRANSLATE 16+1,128+1
+	PALETTE_TRANSLATE 16+2,128+4
+	PALETTE_TRANSLATE 16+3,128+5
+	PALETTE_TRANSLATE 20+1,144+1
+	PALETTE_TRANSLATE 20+2,144+4
+	PALETTE_TRANSLATE 20+3,144+5
+	PALETTE_TRANSLATE 24+1,160+1
+	PALETTE_TRANSLATE 24+2,160+4
+	PALETTE_TRANSLATE 24+3,160+5
+	PALETTE_TRANSLATE 28+1,176+1
+	PALETTE_TRANSLATE 28+2,176+4
+	PALETTE_TRANSLATE 28+3,176+5
+	; copy and convert OAM
+	ldy #0
+	:
+		lda _oam+3, Y ; X
+		sta snes_oam+0, Y
+		lda _oam+0, Y ; Y
+		sta snes_oam+1, Y
+		lda _oam+1, Y ; tile
+		sta snes_oam+2, Y
+		ldx _oam+2, Y ; attribute
+		lda snes_oam_convert, X
+		sta snes_oam+3, Y
+		iny
+		iny
+		iny
+		iny
+		bne :-
+	; TODO translate PPU update
+	; TODO build HDMA gradient
+	lda z:ppu_post_mode
+	sta z:snes_post_mode ; TODO translate this too
+	plb
 	wai ; TODO wait for interrupt to proceed
 	rtl
