@@ -182,7 +182,19 @@ _oam: .res 256
 .import snes_init : far
 .import snes_nmi : far
 
+.import snes_ppu_load_chr : far
+.import snes_ppu_fill : far
+.import snes_ppu_fill_att : far
+.import snes_ppu_apply : far
+.import snes_ppu_post : far
+
+.export _snes_ppu_load_chr : abs
+.export _snes_ppu_fill : abs
+.export _snes_ppu_fill_att : abs
+
 .export sound_update_long : far
+
+.exportzp ppu_post_mode
 .export nes_apu : abs
 
 .segment "SNESRAM"
@@ -1506,15 +1518,14 @@ sound_deliver_apu:
 .export _ppu_latch
 .export _ppu_direction
 .export _ppu_write
-.export _ppu_load
-.export _ppu_fill
-.export _ppu_ctrl
-.export _ppu_mask
+;.export _ppu_load
+;.export _ppu_fill
+;.export _ppu_mask
 .export _ppu_scroll_x
 .export _ppu_scroll_y
 .export _ppu_post
-.export _ppu_profile
-.export _ppu_apply_direction
+;.export _ppu_profile
+;.export _ppu_apply_direction
 .export _ppu_apply
 
 .import _main
@@ -1523,9 +1534,11 @@ sound_deliver_apu:
 .segment "CODE"
 
 _ppu_latch:
-	bit $2002
-	stx $2006
-	sta $2006
+	;bit $2002
+	;stx $2006
+	;sta $2006
+	sta $2116 ; VMADDL
+	stx $2117 ; VMADDH
 	rts
 
 _ppu_direction:
@@ -1542,85 +1555,8 @@ _ppu_direction:
 	rts
 
 _ppu_write:
-	sta $2007
-	rts
-
-_ppu_load:
-	; A:X = count
-	stx tmp1
-	tax
-	cpx #0
-	beq @page
-	; finish incomplete page first
-	ldy #0
-	:
-		lda (_ptr), Y
-		sta $2007
-		iny
-		dex
-		bne :-
-	tya
-	clc
-	adc _ptr+0
-	sta _ptr+0
-	lda #0
-	adc _ptr+1
-	sta _ptr+1
-@page: ; remaining 256 byte pages
-	;     X = 0
-	txa ; A = 0
-	cmp tmp1
-	beq @done
-	tay ; Y = 0, tmp1 = remaining page count
-	:
-		lda (_ptr), Y
-		sta $2007
-		iny
-		bne :-
-	inc _ptr+1
-	dec tmp1
-	jmp @page
-@done:
-	rts
-
-_ppu_fill:
-	; A:X = count
-	; stack = fill value
-	sta tmp1
-	lda ppu_2000 ; set increment by 1 mode
-	and #%11111011
-	sta $2000
-	jsr popa
-	ldy tmp1
-	cpy #0
-	beq @no_partial
-@page:
-	:
-		sta $2007
-		dey
-		bne :-
-@no_partial:
-	cpx #0
-	beq @done
-	dex
-	ldy #0
-	jmp @page
-@done:
-	rts
-
-_ppu_ctrl:
-	and #%00111000
-	pha
-	lda ppu_2000
-	and #%11000111
-	sta ppu_2000
-	pla
-	ora ppu_2000
-	sta ppu_2000
-	rts
-
-_ppu_mask:
-	sta ppu_2001
+	;sta $2007
+	sta $2118 ; VMADATAL
 	rts
 
 _ppu_scroll_x:
@@ -1656,23 +1592,23 @@ _ppu_scroll_y:
 
 _ppu_post:
 	sta ppu_post_mode
+	.p816
+	jsl snes_ppu_post
+	.p02
 	:
 		lda ppu_post_mode
 		bne :-
 	rts
 
-_ppu_profile:
-	ora ppu_2001
-	sta $2001
-	rts
-
-_ppu_apply_direction:
-	jsr _ppu_direction
-	lda ppu_2000
-	sta $2000
-	rts
-
 _ppu_apply:
+	.p816
+	.a8
+	.i8
+	jsl snes_ppu_apply
+	rts
+	.p02
+; unused NES code for reference:
+.if 0
 	bit $2002
 	lda _ppu_send_addr+1
 	sta $2006
@@ -1693,15 +1629,36 @@ _ppu_apply:
 	ldx #0
 	stx _ppu_send_count
 	rts
+.endif
 
 nmi:
 	.p816
 	.a8
 	.i8
+	rep #$30
+	.a16
+	.i16
+	pha
+	phx
+	phy
+	phb
+	sep #$30
+	.a8
+	.i8
 	jsl snes_nmi
+	rep #$30
+	.a16
+	.i16
+	plb
+	ply
+	plx
+	pla
 	rti
+	.a8
+	.i8
 	.p02
 ; unused NES code for reference:
+.if 0
 	pha
 	txa
 	pha
@@ -1807,6 +1764,7 @@ nmi:
 	tax
 	pla
 	rti
+.endif
 
 irq:
 	rti
@@ -2004,6 +1962,38 @@ cc65_init:
 sound_update_long:
 	jsr sound_update
 	rtl
+
+;void snes_ppu_load_chr(uint16 addr, uint16 count)
+_snes_ppu_load_chr:
+	sta z:ptr2+0
+	stx z:ptr2+1
+	jsr popax
+	sta z:ptr1+0
+	stx z:ptr1+1
+	jsl snes_ppu_load_chr
+	rts
+
+fill_param:
+	sta z:ptr2+0
+	stx z:ptr2+1
+	jsr popa
+	sta z:tmp1
+	jsr popax
+	sta z:ptr1+0
+	stx z:ptr1+1
+	rts
+
+;void snes_ppu_fill(uint16 addr, uint8 value, uint16 count)
+_snes_ppu_fill:
+	jsr fill_param
+	jsl snes_ppu_fill
+	rts
+
+;void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count)
+_snes_ppu_fill_att:
+	jsr fill_param
+	jsl snes_ppu_fill_att
+	rts
 
 .segment "STUB"
 

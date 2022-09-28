@@ -92,19 +92,24 @@ extern void sound_play(const uint8* addr); // play a sound effect
 
 extern void te_switch(); // rendering off, reset and switch mode
 
+// NES PPU access is either modified for SNES or replaced/removed
 extern void ppu_latch(uint16 addr); // write address to PPU latch
-extern void ppu_direction(uint8 vertical); // set write increment direction
 extern void ppu_write(uint8 value); // write value to $2007
-extern void ppu_load(uint16 count); // uploads bytes from ptr to $2007 (clobbers ptr)
-extern void ppu_fill(uint8 value, uint16 count); // uploads single value to $2007
-extern void ppu_ctrl(uint8 v); // $2000, only bits 4-6 count (tile pages, sprite height), applies at next post
-extern void ppu_mask(uint8 v); // $2001, applies at next post
+//extern void ppu_load(uint16 count); // uploads bytes from ptr to $2007 (clobbers ptr)
+//extern void ppu_fill(uint8 value, uint16 count); // uploads single value to $2007
+//extern void ppu_mask(uint8 v); // $2001, applies at next post
 extern void ppu_scroll_x(uint16 x);
 extern void ppu_scroll_y(uint16 y);
 extern void ppu_post(uint8 mode); // waits for next frame and posts PPU update
-extern void ppu_profile(uint8 emphasis); // immediate $2001 write, OR with current mask (use bit 0 for greyscale)
-extern void ppu_apply_direction(uint8 vertical); // immediately set write increment direction
+//extern void ppu_profile(uint8 emphasis); // immediate $2001 write, OR with current mask (use bit 0 for greyscale)
+//extern void ppu_apply_direction(uint8 vertical); // immediately set write increment direction
 extern void ppu_apply(); // immediately uploads ppu_send to $2007, resets ppu_send_count to 0
+
+// SNES extensions
+extern void snes_ppu_load_chr(uint16 addr, uint16 count); 
+extern void snes_ppu_fill(uint16 addr, uint8 value, uint16 count);
+extern void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count); // translates NES attributes to SNES
+
 
 // POST_OFF     turn off rendering
 // POST_NONE    turn on, no other updates
@@ -501,7 +506,7 @@ void debug_assert(int v)
 {
 	if (!v)
 	{
-		ppu_profile(0x81); // red tinted grey
+		//ppu_profile(0x81); // red tinted grey
 		while(1); // infinite loop
 	}
 }
@@ -583,8 +588,11 @@ void ppu_text(const char* text, uint16 addr)
 
 void cls() // erase nametables
 {
-	ppu_latch(0x2000);
-	ppu_fill(0x00,0x1000);
+	//ppu_latch(0x2000);
+	//ppu_fill(0x00,0x1000);
+	snes_ppu_fill(0x2000,0x00,0x800);
+	snes_ppu_fill_att(0x23C0,0x00,64);
+	snes_ppu_fill_att(0x27C0,0x00,64);
 }
 
 void sprite_begin()
@@ -1161,7 +1169,7 @@ void title()
 			if (j>0) ppu_apply();
 		}
 	}
-	ppu_apply_direction(0);
+	//ppu_apply_direction(0);
 
 	// title
 	if (!te)
@@ -1188,24 +1196,30 @@ void title()
 	}
 
 	// menu
-	ppu_latch(0x23C0 + 0 + (12*2));
-	ppu_fill(attribute(1,1,1,1),16);
+	//ppu_latch(0x23C0 + 0 + (12*2));
+	//ppu_fill(attribute(1,1,1,1),16);
+	snes_ppu_fill_att(0x23C0 + 0 + (12*2),attribute(1,1,1,1),16);
 	if (!te)
 	{
-		ppu_fill(attribute(2,2,2,2),24);
+		//ppu_fill(attribute(2,2,2,2),24);
+		snes_ppu_fill_att(0x23C0 + 0 + (12*2) + 16,attribute(2,2,2,2),24);
 		ppu_text(title_text, 0x2000 + 5 + (15 * 32));
 	}
 	else
 	{
-		ppu_fill(attribute(1,1,2,2),8);
-		ppu_fill(attribute(2,2,2,2),16);
+		//ppu_fill(attribute(1,1,2,2),8);
+		//ppu_fill(attribute(2,2,2,2),16);
+		snes_ppu_fill_att(0x23C0 + 0 + (12*2) + 16,attribute(1,1,2,2), 8);
+		snes_ppu_fill_att(0x23C0 + 0 + (12*2) + 24,attribute(2,2,2,2),16);
 		ppu_text(title_text_te, 0x2000 + 5 + (13 * 32));
 	}
 
 	// help
-	ppu_latch(0x27C0 + 0 + (0*2));
-	ppu_fill(attribute(1,1,1,1),48);
-	ppu_fill(attribute(3,3,3,3),16);
+	//ppu_latch(0x27C0 + 0 + (0*2));
+	//ppu_fill(attribute(1,1,1,1),48);
+	//ppu_fill(attribute(3,3,3,3),16);
+	snes_ppu_fill_att(0x27C0 + 0 + (0*2)     ,attribute(1,1,1,1),48);
+	snes_ppu_fill_att(0x27C0 + 0 + (0*2) + 48,attribute(3,3,3,3),16);
 	if (!te)
 		ppu_text(help_text, 0x2400 + 2 + (3 * 32));
 	else
@@ -2388,20 +2402,24 @@ void main()
 
 	input_setup();
 
-	ppu_latch(0x1000);
-	ppu_fill(0x55,8*1024);
+	//ppu_latch(0x1000);
+	//ppu_fill(0x55,8*1024);
+	snes_ppu_fill(0x1000,0x55,8*1024);
 
 	ptr = te ? layerste_chr : layers_chr;
-	ppu_latch(0x0000);
-	ppu_load(te ? LAYERSTE_CHR_SIZE : LAYERS_CHR_SIZE);
+	//ppu_latch(0x0000);
+	//ppu_load(te ? LAYERSTE_CHR_SIZE : LAYERS_CHR_SIZE);
+	snes_ppu_load_chr(0x0000,te ? LAYERSTE_CHR_SIZE : LAYERS_CHR_SIZE);
 
 	ptr = sprite_chr;
-	ppu_latch(0x1000);
-	ppu_load(SPRITE_CHR_SIZE);
+	//ppu_latch(0x1000);
+	//ppu_load(SPRITE_CHR_SIZE);
+	snes_ppu_load_chr(0x1000,SPRITE_CHR_SIZE);
 
-	#if !SHOW_LEFT_COLUMN
-		ppu_mask(0x18); // hide left column
-	#endif
+	// left column hide is implemented differently on SNES
+	//#if !SHOW_LEFT_COLUMN
+	//	ppu_mask(0x18); // hide left column
+	//#endif
 
 	title();
 	while (1) hole_play();
