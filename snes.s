@@ -550,7 +550,7 @@ spc_reset:
 	cmp a:$2141 ; APUIO1
 	bne :-
 	ldx #(19<<8)|18
-	cpx a:$2142 ; APUIO2
+	cpx a:$2142 ; APUIO2/3
 	bne :-
 	; kick off first frame
 	lda #$20

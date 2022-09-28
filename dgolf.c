@@ -1671,12 +1671,12 @@ void hole_draw()
 			order = ((swing_x + swing_y) / (SWING_FIX / 4)) & 3;
 			tx = ox - tsx - RING_OFFX[order];
 			ty = px - tsy - RING_OFFY[order];
-			if (tx < 256 && ty < 256) sprite_add(0x2B, (uint8)tx, (uint8)ty, RING_CYCLE[order]);
+			if (tx < 256 && ty < 240) sprite_add(0x2B, (uint8)tx, (uint8)ty, RING_CYCLE[order]);
 
 			// solid dark ring direction of pull-back for swing
 			tx = ox + tsx;
 			ty = px + tsy;
-			if (tx < 256 && ty < 256) sprite_add(0x29, (uint8)tx, (uint8)ty, 0x00);
+			if (tx < 256 && ty < 240) sprite_add(0x29, (uint8)tx, (uint8)ty, 0x00);
 
 			// separated from frame count so it's not synchronized with it
 			// (want to avoid some bad colour against the background always
@@ -1689,11 +1689,11 @@ void hole_draw()
 			nx = (tsy * (sint16)order) / (SWING_FRAMES-1);
 			tx = ox - mx;
 			ty = px - nx;
-			if (tx < 256 && ty < 256) sprite_add(RING_GLOW[(ring_glow/32)&3], (uint8)tx, (uint8)ty, 0x00);
+			if (tx < 256 && ty < 240) sprite_add(RING_GLOW[(ring_glow/32)&3], (uint8)tx, (uint8)ty, 0x00);
 
 			tx += tsx;
 			ty += tsy;
-			if (tx < 256 && ty < 256) sprite_add(RING_GLOW[(ring_glow/32)&3], (uint8)tx, (uint8)ty, 0x00);
+			if (tx < 256 && ty < 240) sprite_add(RING_GLOW[(ring_glow/32)&3], (uint8)tx, (uint8)ty, 0x00);
 		}
 	}
 	else if (ox < 256)
