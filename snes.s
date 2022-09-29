@@ -66,8 +66,7 @@ hdma_gradient:  .res (2*240)+3 ; Colour 0 gradient
 	POST_UPDATE = 3
 	POST_DOUBLE = 4
 	; added SNES
-	POST_SNES_CHR = 5
-	POST_SNES_ATT = 6
+	POST_SNES_ATT = 5
 .endenum
 
 .segment "SNES"
@@ -278,31 +277,17 @@ snes_nmi:
 		jmp @post_on
 	:
 	cmp #POST_UPDATE
-	beq @post_update
-	cmp #POST_DOUBLE
-	beq @post_double
+	bcc @post_off
+	cmp #POST_SNES_ATT+1
+	bcc @post_main
 	; otherwise POST_OFF
 @post_off:
 	lda #$8F
 	sta a:$2100 ; INIDISP screen off
 	jmp @end
-@post_update: ; 32 linear bytes
-	jsr @post_common
-	; TODO
+@post_main:
+	jsr snes_post_send
 	stz a:_ppu_send_count
-	jmp @post_on
-@post_double: ; 64 linear bytes
-	jsr @post_common
-	; TODO
-	; TODO NES NMI stuff, see below
-	; types of data:
-	; - nametable (1 or 2 rows)
-	; - vertical nametable ?
-	; - attribute (64 bytes)
-	; - CHR 64 bytes?
-	stz a:_ppu_send_count
-	jmp @post_on
-@post_common:
 	rep #$20
 	.a16
 	; OAM DMA
@@ -346,7 +331,6 @@ snes_nmi:
 	stx a:$420B
 	sep #$20
 	.a8
-	rts
 @post_on:
 	; set horizontal scroll
 	lda a:ppu_2005x
@@ -367,116 +351,6 @@ snes_nmi:
 	jsl sound_update_long ; updates nes_apu
 	jsr spc_update
 	rtl
-
-; TODO delete this as we replace it
-.if 0 ; NES nmi
-	pha
-	txa
-	pha
-	tya
-	pha
-	ldx #0
-	lda ppu_post_mode
-	stx ppu_post_mode ; signal the post is complete (after RTI)
-	jeq @end
-	cmp #POST_NONE
-	jeq @post_none
-	cmp #POST_UPDATE
-	beq @post_update
-	cmp #POST_DOUBLE
-	beq @post_double
-	; otherwise POST_OFF
-@post_off:
-	lda ppu_2001
-	and #%11100001
-	sta $2001
-	jmp @end
-@post_update:
-	jsr @post_common
-	lda ppu_2000
-	sta $2000 ; set direction
-	ldx #0
-	cpx _ppu_send_count
-	bcs :++
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx _ppu_send_count
-		bcc :-
-	:
-	ldx #0
-	stx _ppu_send_count
-	jmp @post_on
-@post_double:
-	jsr @post_common ; direction remains horizontal
-	ldx #0
-	stx _ppu_send_count
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx #32
-		bcc :-
-	lda _ppu_send_addr+1
-	eor #$04 ; flip horizontal nametable
-	sta $2006
-	lda _ppu_send_addr+0
-	sta $2006
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx #64
-		bcc :-
-	jmp @post_on
-@post_common:
-	; OAM
-	lda #0
-	sta $2003
-	lda #>_oam
-	sta $4014
-	; palettes
-	lda #0
-	sta $2000 ; set horizontal increment
-	bit $2002
-	ldx #>$3F00
-	stx $2006
-	;lda #<$3F00
-	sta $2006
-	ldx #0
-	:
-		lda _palette, X
-		sta $2007
-		inx
-		cpx #32
-		bcc :-
-	; prepare address for send
-	lda _ppu_send_addr+1
-	sta $2006
-	lda _ppu_send_addr+0
-	sta $2006
-	rts
-@post_none:
-@post_on:
-	lda ppu_2000
-	sta $2000
-	lda ppu_2005x+0
-	sta $2005
-	lda ppu_2005y+0
-	sta $2005
-	lda ppu_2001
-	sta $2001
-@end:
-	jsr sound_update
-	pla
-	tay
-	pla
-	tax
-	pla
-	rti
-.endif
-
 
 ; ==========================
 ; SPC program for SNES sound
@@ -915,31 +789,163 @@ snes_ppu_fill_att: ; ptr1=addr, ptr2=count, tmp1=data
 	stz a:$2115 ; VMAIN default increment on $2118
 	rtl
 
-snes_ppu_apply: ; note: not used for OBJ CHR
-	; TODO
-	rtl
-.if 0
-	bit $2002
-	lda _ppu_send_addr+1
-	sta $2006
-	lda _ppu_send_addr+0
-	sta $2006
-	lda ppu_2000
-	sta $2000 ; set direction
-	ldx #0
-	cpx _ppu_send_count
-	bcs :++
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx _ppu_send_count
-		bcc :-
-	:
-	ldx #0
-	stx _ppu_send_count
+snes_post_remap: ; A=source POST enum, translates PPU update, returns SNES POST enum.
+	cmp #POST_UPDATE
+	beq @update
+	cmp #POST_DOUBLE
+	beq @keep
+	cmp #POST_NONE
+	beq @keep
+	; everything else assumed POST_OFF
+	lda #POST_OFF
+@keep:
+	rts ; NON/DOUBLE don't need repack
+@update:
+	lda a:_ppu_send_addr+1
+	cmp #$20
+	bcc @chr ; < $2000 = CHR
+	and #$03
+	cmp #$03
+	bne @nmt
+	lda a:_ppu_send_addr+0
+	cmp #$C0
+	bcs @att ; >= $23C0 / 27C0... = ATT
+@nmt: 
+	; NMT needs no repack
+	lda #POST_UPDATE
 	rts
-.endif
+@att:
+	lda a:_ppu_send_count
+	jsr snes_repack_att
+	rep #$20
+	.a16
+	lda a:_ppu_send_addr
+	jsr snes_redirect_att
+	sta a:_ppu_send_addr
+	sep #$20
+	.a8
+	lda #POST_SNES_ATT
+	rts
+@chr:
+	; _ppu_send_count assumed 8
+	; _ppu_send_addr assumed a multiple of 8
+	rep #$20
+	.a16
+	lda a:_ppu_send_addr
+	lsr
+	pha
+	and #7
+	beq :+
+		pla
+		eor #$0800 ; every second tile goes to second page
+		bra :++
+	:
+		pla
+	:
+	and #$FFF8 ; remove "4" from second page address
+	sta a:_ppu_send_addr
+	sep #$20
+	.a8
+	lda #POST_UPDATE
+	rts
+
+snes_post_send: ; A = update type
+	cmp #POST_UPDATE
+	beq @update
+	cmp #POST_DOUBLE
+	beq @double
+	cmp #POST_SNES_ATT
+	beq @att
+	rts ; unknown
+@update:
+	lda a:ppu_2000
+	and #%00000100
+	beq :+
+		lda #$01
+		sta a:$2115 ; VMAIN increment 32 bytes after $2118
+	:
+	jsr @dma_common
+	rep #$20
+	.a16
+	lda a:_ppu_send_addr
+	sta a:$2116 ; VMADD
+	lda #.loword(_ppu_send)
+	sta a:$4302
+	ldx a:_ppu_send_count
+	beq :+
+		stx a:$4305
+		ldx #1
+		stx a:$420B ; DMA
+	:
+	sep #$20
+	.a8
+	stz a:$2115 ; VMAIN default increment after $2118
+	rts
+@double:
+	jsr @dma_common
+	rep #$20
+	.a16
+	lda a:_ppu_send_addr
+	sta a:$2116 ; VMADD
+	lda #.loword(_ppu_send)
+	sta a:$4302
+	ldx #32
+	stx a:$4305 ; 32 bytes
+	ldx #1
+	stx a:$420B ; DMA
+	lda a:_ppu_send_addr
+	eor #$0400 ; switch horizontal nametable
+	sta a:$2116 ; VMADD
+	ldx #32
+	stx a:$4305 ; 32 bytes
+	ldx #1
+	stx a:$420B ; DMA
+	sep #$20
+	.a8
+	rts
+@att:
+	lda #$80
+	sta a:$2115 ; VMAIN increment after $2119
+	jsr @dma_common
+	lda #$19
+	sta a:$4301 ; $2119 VMDATAH
+	rep #$20
+	.a16
+	lda a:_ppu_send_addr
+	sta a:$2116 ; VMADD
+	lda #.loword(snes_repack)
+	sta a:$4302
+	lda a:_ppu_send_count
+	and #$00FF
+	asl
+	asl
+	asl
+	asl
+	sta a:$4305 ; count * 16
+	beq :+
+		ldx #1
+		stx a:$420B ; DMA
+	:
+	sep #$20
+	.a8
+	stz a:$2115 ; VMAIN default increment after $2118
+	rts
+@dma_common:
+	ldx #0
+	stx a:$4300 ; 1-to-1 no increment
+	stz a:$4306 ; less than 256 bytes
+	ldx #$18
+	stx a:$4301 ; $2118 VMDATAL
+	ldx #$7E
+	stx a:$4304 ; RAM bank
+	rts
+
+snes_ppu_apply: ; note: not used for OBJ CHR
+	lda #POST_UPDATE
+	jsr snes_post_remap
+	jsr snes_post_send
+	stz a:_ppu_send_count
+	rtl
 
 .macro PALETTE_TRANSLATE n_, s_
 	ldx _palette+(n_)
@@ -995,10 +1001,10 @@ snes_ppu_post:
 		iny
 		iny
 		bne :-
-	; TODO translate PPU update
 	; TODO build HDMA gradient
 	lda z:ppu_post_mode
-	sta z:snes_post_mode ; TODO translate this too
+	jsr snes_post_remap
+	sta z:snes_post_mode
 	plb
-	wai ; TODO wait for interrupt to proceed
+	wai
 	rtl
