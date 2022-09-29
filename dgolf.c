@@ -107,7 +107,8 @@ extern void ppu_apply(); // immediately uploads ppu_send to $2007, resets ppu_se
 
 // SNES extensions
 extern void snes_ppu_load_chr(uint16 addr, uint16 count); 
-extern void snes_ppu_fill(uint16 addr, uint8 value, uint16 count);
+extern void snes_ppu_fill(uint16 addr, uint8 value, uint16 count); // use for NES CHR/nametable (not attributes)
+extern void snes_ppu_fill_2119(uint16 addr, uint8 value, uint16 count); // special writes for SNES
 extern void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count); // translates NES attributes to SNES
 
 
@@ -2411,6 +2412,7 @@ void main()
 	//ppu_latch(0x0000);
 	//ppu_load(te ? LAYERSTE_CHR_SIZE : LAYERS_CHR_SIZE);
 	snes_ppu_load_chr(0x0000,te ? LAYERSTE_CHR_SIZE : LAYERS_CHR_SIZE);
+	snes_ppu_fill_2119(0x0030>>1,0xFF,8); // tile $03 gets special use for ocean
 
 	ptr = sprite_chr;
 	//ppu_latch(0x1000);

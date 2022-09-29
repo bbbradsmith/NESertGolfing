@@ -10,10 +10,12 @@
 ; - support mouse and multitap, use "normal" input gathering
 ; - duplicate A/X, remap to 8-bit poll
 ; - L/R/Select/Start reset
+; - L/R turn SNES additions off/on?
 ;
 ; SNES additions:
 ;   set colour 0 to black to be windowed off
 ;   use BG2 as a solid colour background, HDMA it with sky gradient
+;   - gradient must start below the score display
 ;   use BG1 as a grain texture (maybe 2bpp x 2 via two palettes?) subtractive against BG3/OBJ
 ;   - need to add a second tee sprite with palette=4 so it can blend with BG1?
 
@@ -45,6 +47,7 @@
 
 .export snes_ppu_load_chr : far
 .export snes_ppu_fill : far
+.export snes_ppu_fill_2119 : far
 .export snes_ppu_fill_att : far
 .export snes_ppu_apply : far
 .export snes_ppu_post : far
@@ -638,6 +641,26 @@ snes_ppu_fill: ; ptr1=addr, ptr2=count, tmp1=data
 	.i8
 	rtl
 
+snes_ppu_fill_2119: ; ptr1=addr, ptr2=count; tmp1=data
+	.a8
+	.i8
+	rep #$10
+	.i16
+	ldx z:ptr1
+	stx a:$2116
+	lda #$80
+	sta a:$2115 ; VMAIN increment on $2119
+	lda z:tmp1
+	ldx z:ptr2
+	:
+		sta a:$2119 ; VMDATAH
+		dex
+		bne :-
+	stz a:$2115 ; VMAIN default increment on $2118
+	sep #$10
+	.i8
+	rtl
+
 snes_redirect_att: ; A16=addr in attribute area, returns adjusted address, clobbers ptr3
 	.a16
 	pha
@@ -973,8 +996,10 @@ snes_ppu_post:
 	PALETTE_TRANSLATE  0,  0
 	; BG is really 1bpp, only needs 1 colour per palette
 	PALETTE_TRANSLATE  0+1,  0+1
+	PALETTE_TRANSLATE  0+3,  0+3
 	PALETTE_TRANSLATE  4+2,  4+1
 	PALETTE_TRANSLATE  8+1,  8+1
+	PALETTE_TRANSLATE  8+3,  8+3
 	PALETTE_TRANSLATE 12+2, 12+1
 	; OBJ translates 21 to 0201
 	PALETTE_TRANSLATE 16+1,128+1

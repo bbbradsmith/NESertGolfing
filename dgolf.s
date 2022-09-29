@@ -184,12 +184,14 @@ _oam: .res 256
 
 .import snes_ppu_load_chr : far
 .import snes_ppu_fill : far
+.import snes_ppu_fill_2119 : far
 .import snes_ppu_fill_att : far
 .import snes_ppu_apply : far
 .import snes_ppu_post : far
 
 .export _snes_ppu_load_chr : abs
 .export _snes_ppu_fill : abs
+.export _snes_ppu_fill_2119 : abs
 .export _snes_ppu_fill_att : abs
 
 .export sound_update_long : far
@@ -1846,6 +1848,12 @@ fill_param:
 _snes_ppu_fill:
 	jsr fill_param
 	jsl snes_ppu_fill
+	rts
+
+;void snes_ppu_fill_2119(uint16 addr, uint8 value, uint16 count)
+_snes_ppu_fill_2119:
+	jsr fill_param
+	jsl snes_ppu_fill_2119
 	rts
 
 ;void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count)
