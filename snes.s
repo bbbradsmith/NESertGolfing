@@ -65,8 +65,9 @@ hdma_gradient:  .res (2*240)+3 ; Colour 0 gradient
 	POST_NONE   = 2
 	POST_UPDATE = 3
 	POST_DOUBLE = 4
-	; added
-	; TODO
+	; added SNES
+	POST_SNES_CHR = 5
+	POST_SNES_ATT = 6
 .endenum
 
 .segment "SNES"
@@ -125,24 +126,6 @@ snes_reset:
 		inx
 		cpx #$0E
 		bcc :-
-	; clear RAM outside of NES area
-	lda #0 ; set first byte of each region to 0, use MVN to copy-fill
-	sta f:$7E0800
-	sta f:$7F0000
-	rep #$30
-	.a16
-	.i16
-	ldx #$0800
-	ldy #$0801
-	lda #$10000-$802
-	.byte $54,$7E,$7E ; MVN #$7E,#$7E (for compatibility with old assembler versions)
-	ldx #$0000
-	ldy #$0001
-	lda #$10000-2
-	.byte $54,$7F,$7F ; MVN #$7F,#$7F
-	sep #$30
-	.a8
-	.i8
 	; set default data bank
 	lda #$80
 	pha
@@ -188,6 +171,24 @@ snes_reset:
 	stz a:$4305 ; 64k
 	ldx #1
 	stx a:$420B
+	; clear RAM with DMA (outside of NES area only)
+	lda #$0800
+	sta a:$2181
+	ldx #$7E
+	stx a:$2183 ; WMADD = $7E800
+	ldx #%00001000 ; 1-to-1, no increment
+	stx a:$4300
+	ldx #$80 ; $2180 WMDATA
+	stx a:$4301
+	lda #$10000-$800
+	sta a:$4305 ; 64k - 2k NES
+	ldx #1
+	stx $420B
+	; WMADD = $7F000
+	; $4305 = 0 = 64k
+	ldx #1
+	stx $420B
+	; done
 	sep #$20
 	.a8
 	; upload SPC program and return
