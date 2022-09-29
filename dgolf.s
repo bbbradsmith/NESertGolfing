@@ -1,6 +1,6 @@
 ;
 ; dgolf.s
-; NESert Golfing, by Brad Smith 2019
+; sNESert Golfing, by Brad Smith 2019-2022
 ; http://rainwarrior.ca
 ;
 
@@ -1592,29 +1592,6 @@ _ppu_apply:
 	jsl snes_ppu_apply
 	rts
 	.p02
-; unused NES code for reference:
-.if 0
-	bit $2002
-	lda _ppu_send_addr+1
-	sta $2006
-	lda _ppu_send_addr+0
-	sta $2006
-	lda ppu_2000
-	sta $2000 ; set direction
-	ldx #0
-	cpx _ppu_send_count
-	bcs :++
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx _ppu_send_count
-		bcc :-
-	:
-	ldx #0
-	stx _ppu_send_count
-	rts
-.endif
 
 nmi:
 	.p816
@@ -1642,114 +1619,6 @@ nmi:
 	.a8
 	.i8
 	.p02
-; unused NES code for reference:
-.if 0
-	pha
-	txa
-	pha
-	tya
-	pha
-	ldx #0
-	lda ppu_post_mode
-	stx ppu_post_mode ; signal the post is complete (after RTI)
-	jeq @end
-	cmp #POST_NONE
-	jeq @post_none
-	cmp #POST_UPDATE
-	beq @post_update
-	cmp #POST_DOUBLE
-	beq @post_double
-	; otherwise POST_OFF
-@post_off:
-	lda ppu_2001
-	and #%11100001
-	sta $2001
-	jmp @end
-@post_update:
-	jsr @post_common
-	lda ppu_2000
-	sta $2000 ; set direction
-	ldx #0
-	cpx _ppu_send_count
-	bcs :++
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx _ppu_send_count
-		bcc :-
-	:
-	ldx #0
-	stx _ppu_send_count
-	jmp @post_on
-@post_double:
-	jsr @post_common ; direction remains horizontal
-	ldx #0
-	stx _ppu_send_count
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx #32
-		bcc :-
-	lda _ppu_send_addr+1
-	eor #$04 ; flip horizontal nametable
-	sta $2006
-	lda _ppu_send_addr+0
-	sta $2006
-	:
-		lda _ppu_send, X
-		sta $2007
-		inx
-		cpx #64
-		bcc :-
-	jmp @post_on
-@post_common:
-	; OAM
-	lda #0
-	sta $2003
-	lda #>_oam
-	sta $4014
-	; palettes
-	lda #0
-	sta $2000 ; set horizontal increment
-	bit $2002
-	ldx #>$3F00
-	stx $2006
-	;lda #<$3F00
-	sta $2006
-	ldx #0
-	:
-		lda _palette, X
-		sta $2007
-		inx
-		cpx #32
-		bcc :-
-	; prepare address for send
-	lda _ppu_send_addr+1
-	sta $2006
-	lda _ppu_send_addr+0
-	sta $2006
-	rts
-@post_none:
-@post_on:
-	lda ppu_2000
-	sta $2000
-	lda ppu_2005x+0
-	sta $2005
-	lda ppu_2005y+0
-	sta $2005
-	lda ppu_2001
-	sta $2001
-@end:
-	jsr sound_update
-	pla
-	tay
-	pla
-	tax
-	pla
-	rti
-.endif
 
 irq:
 	rti

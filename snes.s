@@ -1,15 +1,21 @@
-; TODO
-; rewrite OAM building code to use SNES attributes (might need to edit C code too if it has built-in attribute)
-; NMI handler, translate packed 1bpp into two separate VRAM locations, translate palettes, etc.
-; support for other SNES buttons, maybe L/R/Select/Start reset?
-; multitap support? the NES multitap support is vestigial now...
 ;
-; uses BG3 for NES stuff
-; but expand 1BPP tiles automatically into a larger address space
-; use colour 0 with HDMA gradient (make a table of 2 SNES colours for each NES background colour? replace "blend" at higher level)
-; use BG1 with a tiled texture for some subtle sand grain? maybe just some subtractive blend;
-;  of a grit texture in a diagonal wood-grainy wave? could mabe have 2 x 2-bit multiple textures w/palette selectors?
+; snes.s
+; sNESert Golfing, by Brad Smith 2019-2022
+; http://rainwarrior.ca
+;
 
+; TODO
+;
+; input rewrite:
+; - support mouse and multitap, use "normal" input gathering
+; - duplicate A/X, remap to 8-bit poll
+; - L/R/Select/Start reset
+;
+; SNES additions:
+;   set colour 0 to black to be windowed off
+;   use BG2 as a solid colour background, HDMA it with sky gradient
+;   use BG1 as a grain texture (maybe 2bpp x 2 via two palettes?) subtractive against BG3/OBJ
+;   - need to add a second tee sprite with palette=4 so it can blend with BG1?
 
 .p816
 .a8
@@ -246,7 +252,6 @@ snes_init:
 	lda #%00000010
 	sta a:$2130 ; CGWSEL subscreen
 	lda #%10000100
-	; TODO enable
 	sta a:$2131 ; CGADSUB subtract from BG3 only
 	; global screen settings
 	lda #$04

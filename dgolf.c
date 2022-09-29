@@ -1,6 +1,6 @@
 //
 // dgolf.c
-// NESert Golfing, by Brad Smith 2019-2022
+// sNESert Golfing, by Brad Smith 2019-2022
 // http://rainwarrior.ca
 //
 
@@ -949,15 +949,15 @@ void delay(uint8 frames)
 //
 
 const char help_text[] =
-	"       NESert Golfing\n"
-	"      Brad Smith, 2019\n"
+	"      sNESert Golfing\n"
+	"   Brad Smith, 2019-2022\n"
 	"   http://rainwarrior.ca\n"
 	"\n"
 	"GAMEPAD CONTROL:\n"
-	"  Hold A to begin swing,\n"
+	"  Hold B to begin swing,\n"
 	"  use directions to aim,\n"
 	"  release to stroke.\n"
-	"  Hold B for fine control.\n"
+	"  Hold Y for fine control.\n"
 	"\n"
 	"MOUSE CONTROL:\n"
 	"  Hold left button to begin\n"
@@ -979,15 +979,15 @@ const char title_text[] =
 	"         Help";
 
 const char help_text_te[] =
-	"     NESert Golfing " VERSION_STRING "\n"
+	"    sNESert Golfing " VERSION_STRING "\n"
 	"   Brad Smith, 2019-2022\n"
 	"   http://rainwarrior.ca\n"
 	"\n"
 	"GAMEPAD CONTROL:\n"
-	"  Hold A to begin swing,\n"
+	"  Hold B to begin swing,\n"
 	"  use directions to aim,\n"
 	"  release to stroke.\n"
-	"  Hold B for fine control.\n"
+	"  Hold Y for fine control.\n"
 	"\n"
 	"MOUSE CONTROL:\n"
 	"  Hold left button to begin\n"
