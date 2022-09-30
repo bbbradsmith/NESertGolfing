@@ -267,7 +267,7 @@ snes_init:
 	sta a:$2105 ; BGMODE mode 1
 	stz a:$2115 ; VMAIN default increment on $2118
 	; begin
-	lda #$81
+	lda #$80 ; NMI on, automatic joypad off
 	sta a:$4200 ; NMITIMEN turn on NMI
 	rtl
 
