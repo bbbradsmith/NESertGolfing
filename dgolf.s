@@ -196,6 +196,7 @@ OCEAN_FLOOR = 224 ; must be multiple of 8 and match parallel definition in dgolf
 .export _hole
 
 .export _te_switch
+.export _soft_reset
 
 .segment "RODATA"
 
@@ -1169,7 +1170,7 @@ _input_poll:
 		sta _mouse1
 		sta _mouse2
 		sta _mouse3
-		rts
+		jmp @finish
 	@mouse:
 		;lda mouse_index
 		tax
@@ -1189,8 +1190,16 @@ _input_poll:
 			adc #1
 		:
 		sta _mouse3
-		rts
-	;
+		;jmp @finish
+	@finish:
+	; A+B+SELECT+START soft reset
+	lda _gamepad
+	and #$F0
+	cmp #$F0
+	bne :+
+		jmp _soft_reset
+	:
+	rts
 
 ; =====
 ; Sound
@@ -1933,14 +1942,15 @@ reset:
 	; initialize CC65 and enter main()
 	jsr cc65_init
 	jsr _main
-	jmp ($FFFC)
+	jmp _soft_reset
 
 _te_switch: ; void te_switch()
 	lda #POST_OFF
 	jsr _ppu_post
 	lda #TE_SIG2+1 ; (+1) 02 = flip
 	sta _te+2
-	jmp ($FFFC)
+_soft_reset:
+	jmp reset_stub
 
 ; ==========
 ; CC65 setup
