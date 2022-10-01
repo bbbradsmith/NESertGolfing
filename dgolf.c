@@ -91,6 +91,7 @@ extern void input_poll();
 extern void sound_play(const uint8* addr); // play a sound effect
 
 extern void te_switch(); // rendering off, reset and switch mode
+extern void soft_reset();
 
 extern void ppu_latch(uint16 addr); // write address to PPU latch
 extern void ppu_direction(uint8 vertical); // set write increment direction

@@ -104,4 +104,4 @@ used as part of the build. See the file list below for details.
 ## Other Versions
 
 Tournament Edition:
-- In version 1.5 this was merged into the regular game. Select HELP from the menu, press and hold A, then press SELECT to switch to Tournament Edition.
+- In version 1.5 this was merged into the regular game. Select HELP from the menu, press and hold A, then press SELECT to switch to Tournament Edition. (A+B+SELECT+START will also reset the game.)
