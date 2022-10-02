@@ -66,14 +66,14 @@ extern uint8 te; // TE non-zero if tournament edition active
 #pragma zpsym("vx")
 #pragma zpsym("te")
 
-extern uint8 input[16];
-extern uint8 input_flags;
+//extern uint8 input[16]; // SNES implementation treats these variables as internal, input_poll will update gamepad/mouse1-3
+//extern uint8 input_flags;
 extern uint8 gamepad;
 extern uint8 mouse1;
 extern sint8 mouse2;
 extern sint8 mouse3;
-#pragma zpsym("input")
-#pragma zpsym("input_flags")
+//#pragma zpsym("input")
+//#pragma zpsym("input_flags")
 #pragma zpsym("gamepad")
 #pragma zpsym("mouse1")
 #pragma zpsym("mouse2")
@@ -85,8 +85,8 @@ extern uint8 prngw(); // TE dependent random generator for ongoing wind adjustme
 extern uint8 prngw1(); // TE
 extern uint8 prngf(); // TE independent random generator for things that should still be random
 extern uint8 prngf1(); // TE
-extern void mouse_sense(); // cycles sensitivity setting (doesn't work on Hyperkin clone)
-extern void input_setup();
+extern void mouse_sense(); // cycles sensitivity setting (doesn't work on Hyperkin clone), SNES: this operation will be delayed until vblank
+extern void input_setup(); // on SNES expects NMI to be enabled already
 extern void input_poll();
 extern void sound_play(const uint8* addr); // play a sound effect
 

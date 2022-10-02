@@ -17,9 +17,9 @@ ppu_post_mode: .res 1
 _seedw:        .res 4 ; TE dependent seed for wind changes only
 _seedf:        .res 4 ; TE independent seed for things that can still be random (e.g. rain/snow animation)ppu_post_mode: .res 1
 sound_ptr:     .res 2
-_input:        .res 16
-mouse_index:   .res 1
-fourscore_off: .res 1
+;_input:        .res 16 ; SNES internal input variables are tracked in snes.s
+;mouse_index:   .res 1
+;fourscore_off: .res 1
 _gamepad:      .res 1
 _mouse1:       .res 1
 _mouse2:       .res 1
@@ -112,7 +112,7 @@ _oam: .res 256
 .exportzp _ptr
 .exportzp _seed
 .exportzp _seedw, _seedf
-.exportzp _input, _gamepad, _mouse1, _mouse2, _mouse3
+.exportzp _gamepad, _mouse1, _mouse2, _mouse3
 .exportzp _i,_j,_k,_l
 .exportzp _mx,_nx,_ox,_px
 .exportzp _ux,_vx
@@ -181,6 +181,9 @@ _oam: .res 256
 .import snes_reset : far
 .import snes_init : far
 .import snes_nmi : far
+.import snes_input_setup : far
+.import snes_input_poll : far
+.import snes_mouse_sense : far
 
 .import snes_ppu_load_chr : far
 .import snes_ppu_fill : far
@@ -195,6 +198,7 @@ _oam: .res 256
 .export _snes_ppu_fill_att : abs
 
 .export sound_update_long : far
+.export reset_stub : far
 
 .exportzp ppu_post_mode
 .export ppu_2000 : abs
@@ -1046,186 +1050,25 @@ prngf1:
 	sta _seedf+0
 	rts
 
-input_poll_raw:
-	; strobe
-	ldy #1
-	sty $4016
-	dey
-	sty $4016
-	; read 4 bytes each from 4 data lines
-input_poll_raw_strobed:
-	ldx #0
-@poll_byte:
-	ldy #8
-	:
-		lda $4016
-		ror
-		rol _input+0, X
-		ror
-		rol _input+2, X
-		lda $4017
-		ror
-		rol _input+1, X
-		ror
-		rol _input+3, X
-		dey
-		bne :-
-	inx
-	inx
-	inx
-	inx
-	cpx #16
-	bcc @poll_byte
-	rts
+; =====
+; Input
+; =====
 
-_mouse_sense:
-	lda #1
-	sta $4016
-	lda $4016
-	lda $4017
-	lda #0
-	sta $4016
-	rts
+.p816
 
 _input_setup:
-	; if present, mouse needs to be initialized by cycling the sensitivity
-	jsr _mouse_sense
-	; detect four-score:
-	;   There are signatures in the 3rd byte, but I'm ignoring this for a simpler test:
-	;   as long as the device reports $00 when not in use, assume no conflict.
-	;   An unknown device might be able to affect the controls in a weird, but benign way,
-	;   but conveniently this overlay works very well with the extra buttons on an SNES Pad.
-	lda #$FF
-	sta fourscore_off
-	jsr input_poll_raw
-	;lda _input+8
-	;cmp #$10 ; signature
-	;bne :+
-	lda _input+4
-	bne :+ ; no buttons pressed
-		lda #$80
-		eor fourscore_off
-		sta fourscore_off
-	:
-	;lda _input+9
-	;cmp #$20
-	;bne :+
-	lda _input+5
-	bne :+
-		lda #$40
-		eor fourscore_off
-		sta fourscore_off
-	:
-	; detect for mouse on all 4 lines:
-	lda #4
-	sta mouse_index ; 4 = no mouse detected
-	ldx #3 ; count down from 3-0 so that lowest index mouse is used
-	@mouse_detect:
-		lda #0
-		sta temp, X
-		stx tmp1
-		jsr input_poll_raw
-		ldx tmp1
-		;lda _input+0, X
-		;bne @fail ; first byte is 0
-		lda _input+4, X
-		and #$0F
-		cmp #1
-		bne @fail ; missing signature
-		lda _input+4, X
-		lsr
-		lsr
-		lsr
-		lsr
-		and #3
-		cmp #3
-		bcs @fail ; invalid sensitivity value
-		@pass:
-			lda #1
-			sta temp, X ; mouse detected
-			stx mouse_index ; mouse selected
-		@fail:
-		dex
-		cpx #4
-		bcc @mouse_detect
-	; attempt to cycle to medium sensitivity setting
-	lda #4 ; maximum 4 attempts (3 should be sufficient, the 4th is for luck)
-	sta tmp1
-	:
-		jsr _mouse_sense
-		jsr _input_poll
-		lda _mouse1
-		and #$30
-		cmp #$10 ; medium setting
-		beq :+
-		dec tmp1
-		bne :-
-	:
+	jsl snes_input_setup
 	rts
 
 _input_poll:
-	jsr input_poll_raw
-	; combine gamepad inputs
-	ldx #0
-	stx _gamepad
-	:
-		lda _input, X
-		cmp #$FF ; unplugged?
-		beq :+
-			ora _gamepad
-			sta _gamepad
-		:
-		inx
-		cpx #4
-		bcc :--
-	lda mouse_index
-	cmp #4
-	bcc @mouse
-	@no_mouse:
-		; no mouse leaves the possibility of four-score
-		; (treated as if duplicates of ports 2/3 if not $FF)
-		bit fourscore_off
-		bmi :+
-		lda _input+4
-		cmp #$FF
-		beq :+
-			ora _gamepad
-			sta _gamepad
-		:
-		bit fourscore_off
-		bvs :+
-		lda _input+5
-		cmp #$FF
-		beq :+
-			ora _gamepad
-			sta _gamepad
-		:
-		lda #0
-		sta _mouse1
-		sta _mouse2
-		sta _mouse3
-		rts
-	@mouse:
-		;lda mouse_index
-		tax
-		lda _input+4, X
-		sta _mouse1
-		lda _input+8, X
-		bpl :+ ; convert signed magnitude to two's complement
-			eor #$7F
-			clc
-			adc #1
-		:
-		sta _mouse2
-		lda _input+12, X
-		bpl :+
-			eor #$7F
-			clc
-			adc #1
-		:
-		sta _mouse3
-		rts
-	;
+	jsl snes_input_poll
+	rts
+
+_mouse_sense:
+	jsl snes_mouse_sense
+	rts
+
+.p02
 
 ; =====
 ; Sound
@@ -1888,7 +1731,7 @@ reset_stub:
 .segment "SNESHEAD"
 
 .byte "SNESERT GOLFING      "
-.byte $20 ; map mode
+.byte $30 ; map mode 0, FastROM
 .byte $00 ; cartridge type (ROM only)
 .byte $06 ; 64kb / 0.5 mbit
 .byte $00 ; RAM size

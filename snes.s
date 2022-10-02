@@ -5,19 +5,13 @@
 ;
 
 ; TODO
-;
-; input rewrite:
-; - support mouse and multitap, use "normal" input gathering
-; - duplicate A/X, remap to 8-bit poll
-; - L/R/Select/Start reset
-; - L/R turn SNES additions off/on?
-;
 ; SNES additions:
 ;   set colour 0 to black to be windowed off
 ;   use BG2 as a solid colour background, HDMA it with sky gradient
 ;   - gradient must start below the score display
 ;   use BG1 as a grain texture (maybe 2bpp x 2 via two palettes?) subtractive against BG3/OBJ
 ;   - need to add a second tee sprite with palette=4 so it can blend with BG1?
+; - L/R turn SNES additions off/on?
 
 .p816
 .a8
@@ -27,6 +21,10 @@
 .importzp _mx, _nx, _ox, _px, _ux, _vx
 .importzp _ptr
 .importzp ppu_post_mode
+.importzp _gamepad
+.importzp _mouse1
+.importzp _mouse2
+.importzp _mouse3
 .importzp ptr1, ptr2, ptr3, ptr4 ; cc65 temporaries
 .importzp tmp1, tmp2, tmp3, tmp4 ; cc65 temporaries
 
@@ -40,10 +38,14 @@
 .import _oam : abs
 
 .import sound_update_long : far
+.import reset_stub : far
 
 .export snes_reset : far
 .export snes_init : far
 .export snes_nmi : far
+.export snes_input_setup : far
+.export snes_input_poll : far
+.export snes_mouse_sense : far
 
 .export snes_ppu_load_chr : far
 .export snes_ppu_fill : far
@@ -61,6 +63,11 @@ VRAM_CHR_OBJ = $4000
 .segment "ZEROPAGE"
 
 snes_post_mode: .res 1
+mouse_sense_cycles: .res 1
+mouse_index: .res 1
+multitap_on: .res 1
+input_temp: .res 10 ; JOY1, JOY2, Mouse / JOY3, JOY4, JOY5
+gamepad_axlr: .res 1
 
 .segment "SNESRAM"
 
@@ -225,6 +232,9 @@ snes_reset:
 snes_init:
 	.a8
 	.i8
+	; FastROM enable
+	lda #1
+	sta a:$420D
 	; setup PPU addresses
 	lda #((>VRAM_NMT_BG1) & $FC) | $00
 	sta a:$2107 ; BG1SC nametable, 1-screen
@@ -267,7 +277,7 @@ snes_init:
 	sta a:$2105 ; BGMODE mode 1
 	stz a:$2115 ; VMAIN default increment on $2118
 	; begin
-	lda #$80 ; NMI on, automatic joypad off
+	lda #$80 ; NMI on, automatic joypad off (will be turned on by _input_setup)
 	sta a:$4200 ; NMITIMEN turn on NMI
 	rtl
 
@@ -356,8 +366,295 @@ snes_nmi:
 	sta a:$2100 ; INIDISP screen on
 	stz z:ppu_post_mode
 @end:
+	jsr input_update
 	jsl sound_update_long ; updates nes_apu
 	jsr spc_update
+	rtl
+
+; =====
+; Input
+; =====
+
+mouse_sense_cycle: ; should only be called when auto-read is disabled
+	.a8
+	lda #1
+	sta a:$4016
+	lda a:$4016
+	lda a:$4017
+	stz a:$4016
+	rts
+
+mouse_poll: ; X = port 0,1
+	.a8
+	.i8
+	ldy #16
+	:
+		lda a:$4016, X
+		lsr
+		rol z:input_temp+4
+		rol z:input_temp+5
+		nop
+		nop
+		nop
+		nop ; margin of safety for Hyperkin mouse clone which expects at least 170 cycles between reads
+		dey
+		bne :-
+	rts
+
+autoread_wait: ; wait until $4212.1 to clear indicating autoread is finished
+	.a8
+:
+	lda a:$4212 ; HVBJOY
+	and #1
+	bne :-
+	rts
+
+input_update: ; runs during NMI to complement automatic hardware poll
+	.a8
+	.i8
+	jsr autoread_wait
+	rep #$20
+	.a16
+	lda a:$4218 ; JOY1
+	sta z:input_temp+0
+	lda a:$421A ; JOY2
+	sta z:input_temp+2
+	sep #$20
+	.a8
+	ldx z:mouse_index
+	cpx #2
+	bcs @no_mouse
+	ldy #5 ; short delay for Hyperkin mouse clone safety which expects at least 336 cycles between the 16th and 17th read
+	:
+		dey
+		bne :-
+	jsr mouse_poll
+	; cycle mouse if requested
+	lda z:mouse_sense_cycles
+	beq :++
+	:
+		jsr mouse_sense_cycle
+		dec z:mouse_sense_cycles
+		bne :-
+	:
+	rts
+@no_mouse:
+	ldx z:multitap_on
+	beq @end
+	; note: we could poll $4017 one extra time here to read the 17th bits indicating whether controllers 2+3 are connected (not needed for this game)
+	lda #$7F
+	sta a:$4201 ; WRIO selects controllers 4/5
+	ldy #16
+	:
+		lda a:$4017
+		lsr
+		rol z:input_temp+6
+		rol z:input_temp+7
+		lsr
+		rol z:input_temp+8
+		rol z:input_temp+9
+		dey
+		bne :-
+	; note: again we could check the 17th bits to check for controllers 4+5 (not needed for this game)
+	lda #$FF
+	sta a:$4201 ; WRIO reset for next frame
+	rep #$20
+	.a16
+	lda a:$421E ; JOY4 is controller 3
+	sta z:input_temp+4
+	sep #$20
+	.a8
+@end:
+	rts
+
+snes_input_setup: ; $4200=$80 (NMI on, auto-read off)
+	.a8
+	.i8
+	lda #$80
+	sta a:$4200 ; NMI on, auto-read off
+	;
+	; 1. detect mouse (just look for 0001 signature on 16-bit report from $4106/$4017)
+	;
+	lda #1
+	sta a:$4016
+	stz a:$4016
+	ldx #1
+	jsr mouse_poll
+	lda z:input_temp+4
+	sta z:input_temp+6
+	lda z:input_temp+5
+	sta z:input_temp+7
+	ldx #0
+	jsr mouse_poll
+	; 5:4 = $4016 report, 7:6 = $4017 report
+	lda #2
+	sta mouse_index ; mouse_index 2 = no mouse detected
+	ldx #2
+@mouse_check: ; check port X/2 for mouse (counting down so that lowest port wins)
+	lda input_temp+4, X
+	and #$0F
+	cmp #1
+	bne :+ ; missing signature
+		txa
+		lsr ; X/2
+		sta mouse_index
+	:
+	dex
+	dex
+	cpx #4
+	bcc @mouse_check
+	;
+	; 2. cycle sensitivity once, then set mouse to medium sensitivity setting
+	;
+	ldx mouse_index
+	cpx #2
+	bcs @multitap_check
+	lda #4 ; maximum 4 attempts (3 should be sufficient, the 4th is for luck)
+	sta z:input_temp+6 ; temporary counter
+	:
+		jsr mouse_sense_cycle
+		ldx mouse_index
+		jsr mouse_poll
+		lda mouse_index
+		asl
+		tax
+		lda z:input_temp+4, X
+		and #$30
+		cmp #$10 ; medium setting
+		beq :+
+		dec z:input_temp+6
+		bne :-
+	:
+	stz z:multitap_on ; mouse does not allow multitap
+	bra @finish
+	;
+	; 3. detect multitap
+	;
+@multitap_check:
+	lda #$FF
+	sta a:$4201 ; reset WRIO (should be this at startup)
+	lda #1
+	sta a:$4016
+	jsr @read_4017_d1x8
+	cmp #$FF
+	bne @multitap_off
+	stz a:$4016
+	jsr @read_4017_d1x8
+	cmp #$FF
+	beq @multitap_off
+@multitap_on:
+	lda #1
+	sta z:multitap_on
+	bra @finish
+@multitap_off:
+	stz z:multitap_on
+	bra @finish
+@read_4017_d1x8:
+	ldx #8
+	:
+		lda a:$4017
+		lsr
+		lsr
+		rol z:input_temp+2
+		dex
+		bne :-
+	lda z:input_temp+2
+	rts
+@finish:
+	; NMI on, auto-read on
+	lda #$81
+	sta a:$4200
+	rtl
+
+snes_input_poll: ; copies NMI polled results
+	.a8
+	.i8
+	ldx z:mouse_index
+	cpx #2
+	bcc @mouse
+	stz z:_mouse1
+	stz z:_mouse2
+	stz z:_mouse3
+	bra @mouse_end
+@mouse:
+	txa
+	asl
+	tax
+	lda z:input_temp+0, X
+	sta z:_mouse1
+	lda z:input_temp+4
+	bpl :+ ; convert signed magnitude to two's complement
+		eor #$7F
+		clc
+		adc #1
+	:
+	sta z:_mouse3
+	lda z:input_temp+5
+	bpl :+
+		eor #$7F
+		clc
+		adc #1
+	:
+	sta z:_mouse2
+@mouse_end:
+	stz z:_gamepad
+	stz z:gamepad_axlr
+	ldx #4 ; default 2 controllers check
+	lda z:multitap_on
+	beq :+
+		ldx #10 ; 5 controllers check
+	:
+	stx z:tmp1
+	ldx #0
+@add_controller:
+	lda z:input_temp+0, X
+	and #$0F
+	bne @next ; signature should be 0000
+	lda z:input_temp+1, X
+	cmp #$FF
+	beq @next ; $FF is invalid (up+down+left+right), could mean disconnected?
+	ora z:_gamepad
+	sta z:_gamepad ; combine with other controllers
+	lda z:input_temp+0, X
+	and #$F0
+	ora z:gamepad_axlr
+	sta z:gamepad_axlr
+@next:
+	inx
+	inx
+	cpx z:tmp1
+	bcc @add_controller
+	; L+R+SELECT+START to reset
+	lda z:_gamepad
+	and #$30
+	cmp #$30
+	bne :+
+	lda z:gamepad_axlr
+	and #$30
+	cmp #$30
+	bne :+
+		jml reset_stub
+	:
+	; forward A/X to Y/B
+	lda z:gamepad_axlr
+	and #$80 ; A
+	beq :+
+		lsr ; remap to Y
+		tsb z:_gamepad
+	:
+	lda z:gamepad_axlr
+	and #$40 ; X
+	beq :+
+		asl ; remap to B
+		tsb z:_gamepad
+	:
+	; done
+	rtl
+
+snes_mouse_sense:
+	.a8
+	.i8
+	inc z:mouse_sense_cycles ; cycle mouse sensitivity during next NMI
 	rtl
 
 ; ==========================
