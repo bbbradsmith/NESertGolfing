@@ -547,6 +547,7 @@ snes_input_setup: ; $4200=$80 (NMI on, auto-read off)
 	sta z:multitap_on
 	bra @finish
 @multitap_off:
+	stz a:$4016
 	stz z:multitap_on
 	bra @finish
 @read_4017_d1x8:
