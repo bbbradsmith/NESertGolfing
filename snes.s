@@ -56,7 +56,8 @@ VRAM_NMT_BG1 = $2800
 VRAM_CHR_BG1 = $3000
 VRAM_CHR_OBJ = $4000
 
-GRADIENT_TOP = 28
+GRADIENT_TOP = 28 ; lines before start of gradient
+GRADIENT_SPLIT = 112 ; should be multiple of 16 (113-GRADIENT_TOP) < split < 128
 
 .segment "ZEROPAGE"
 
@@ -1314,6 +1315,10 @@ snes_build_hdma_gradient: ; takes about 1/2 of a frame, but doesn't happen often
 	lda _mx
 @build:
 	; build HDMA buffer
+	phb
+	ldx #^@dither
+	phx
+	plb
 	rep #$10
 	.i16
 	ldx #0
@@ -1328,23 +1333,38 @@ snes_build_hdma_gradient: ; takes about 1/2 of a frame, but doesn't happen often
 	;stz hdma_gradient0+1, X ; initialized as 0, sets CGADD
 	lda ptr1
 	sta hdma_gradient0+3, X ; CGCOL for scanline 0
-	lda #$80 | 120
+	lda #$80 | GRADIENT_SPLIT
 	sta hdma_gradient0+5, X ; do 120 lines
-	lda #$80 | (240-(120+GRADIENT_TOP))
-	sta hdma_gradient0+6+(120*4), X
+	lda #$80 | (240-(GRADIENT_SPLIT+GRADIENT_TOP))
+	sta hdma_gradient0+6+(GRADIENT_SPLIT*4), X
 	txa
 	clc
 	adc #6
 	tax
-	ldy #120
+	ldy #GRADIENT_SPLIT
 	jsr @row_gradient
 	inx ; skip line count byte
-	ldy #(240-(120+GRADIENT_TOP))
+	ldy #(240-(GRADIENT_SPLIT+GRADIENT_TOP))
 	jsr @row_gradient
 	sep #$30
+	plb
 	.a8
 	.i8
 	rts
+@dither: ; used bit-reversed line counter Y as dither compare
+	.byte 255
+	.repeat 128, I
+		.byte 255-(((I&1)<<7)|((I&2)<<5)|((I&4)<<3)|((I&8)<<1)|((I&16)>>1)|((I&32)>>3)|((I&64)>>5)|((I&128)>>7))
+	.endrepeat
+.macro DITHER
+	xba
+	cmp @dither, Y
+	bcc :+
+		inc
+	:
+	xba
+	and #$1F00
+.endmacro
 @row_gradient: ; build Y rows of gradient starting at X position, clobbers ptr3
 	.a16
 	.i16
@@ -1360,19 +1380,22 @@ snes_build_hdma_gradient: ; takes about 1/2 of a frame, but doesn't happen often
 	clc
 	adc _ox
 	sta _ox
-	and #$1F00
+	DITHER
+	;and #$1F00
 	asl
 	asl
 	sta ptr3   ; 0bbbbb00.00000000
 	lda _nx
-	and #$1F00
+	DITHER
+	;and #$1F00
 	lsr
 	lsr
 	lsr
 	ora ptr3
 	sta ptr3   ; 0bbbbbgg.ggg00000
 	lda _mx
-	and #$1F00
+	DITHER
+	;and #$1F00
 	xba
 	ora ptr3   ; 0bbbbbgg.gggrrrrr
 	sta hdma_gradient0+2, X
@@ -1571,6 +1594,8 @@ snes_ppu_post:
 		iny
 		bne :-
 	; rebuild HDMA gradient if changed
+	lda snes_graphics
+	beq :++
 	lda _palette+0
 	cmp hdma_last0
 	bne :+
