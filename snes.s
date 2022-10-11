@@ -1224,7 +1224,7 @@ snes_post_remap: ; A=source POST enum, translates PPU update, returns SNES POST 
 	lda #POST_UPDATE
 	rts
 
-snes_build_hdma_gradient: ; takes about 1/2 of a frame, but doesn't happen often (and never during gameplay)
+snes_build_hdma_gradient: ; takes about 60% of a frame, but doesn't happen often (and never during gameplay)
 	.a8
 	.i8
 	; flip buffer
