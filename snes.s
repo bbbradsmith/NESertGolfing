@@ -351,8 +351,8 @@ snes_nmi:
 	stx a:$2121 ; CGADD = 128
 	lda #.loword(snes_palette+(128*2))
 	sta a:$4302
-	ldx #64*2
-	stx a:$4305 ; 64 colours
+	ldx #80*2
+	stx a:$4305 ; 80 colours
 	ldx #1
 	stx a:$420B
 	sep #$20
@@ -848,9 +848,9 @@ snes_pal1: ; 0bbbbbgg
 	.byte $5A,$75,$7C,$7C,$64,$30,$00,$01,$01,$01,$01,$1D,$4D,$00,$00,$00
 	.byte $7F,$7E,$7E,$7E,$7D,$69,$2E,$0A,$02,$02,$0F,$37,$67,$25,$00,$00
 	.byte $7F,$7F,$7F,$7F,$7F,$7B,$63,$53,$4B,$47,$53,$63,$77,$5E,$00,$00
-snes_oam_convert: ; vhp...cc -> vhPP0cc0 (duplicate+negate priority bit, select OBJ page 0)
+snes_oam_convert: ; vhp..ccc -> vhPPccc0 (duplicate+negate priority bit, select OBJ page 0)
 	.repeat 256, I
-		.byte ((I & $E0) | ((I>>1) & $10) | ((I & $03) << 1) | $00) ^ $30
+		.byte ((I & $E0) | ((I>>1) & $10) | ((I & $07) << 1) | $00) ^ $30
 	.endrepeat
 
 snes_ppu_load_chr: ; ptr1=addr, ptr2=count, _ptr=data
@@ -1576,6 +1576,8 @@ snes_ppu_post:
 	PALETTE_TRANSLATE 28+1,176+1
 	PALETTE_TRANSLATE 28+2,176+4
 	PALETTE_TRANSLATE 28+3,176+5
+	; extra OBJ palette 4 for tee ground to accept colour math
+	PALETTE_TRANSLATE 24+2,192+4
 	; copy and convert OAM
 	ldy #0
 	:

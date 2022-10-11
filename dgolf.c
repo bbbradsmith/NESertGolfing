@@ -110,6 +110,8 @@ extern void snes_ppu_load_chr(uint16 addr, uint16 count);
 extern void snes_ppu_fill(uint16 addr, uint8 value, uint16 count); // use for NES CHR/nametable (not attributes)
 extern void snes_ppu_fill_2119(uint16 addr, uint8 value, uint16 count); // special writes for SNES
 extern void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count); // translates NES attributes to SNES
+extern uint8 snes_weather_fall;
+#pragma zpsym("snes_weather_fall")
 
 // POST_OFF     turn off rendering
 // POST_NONE    turn on, no other updates
@@ -903,7 +905,10 @@ void weather_attribute_set()
 {
 	// sets speed and palette via whether tile is rain or snow
 	// the unused bits of the OAM attribute byte are used to control particle fall speed
-	weather_attribute = (weather_tile == 0x38) ? ((4<<2)|3) : ((1<<2)|2);
+	//weather_attribute = (weather_tile == 0x38) ? ((4<<2)|3) : ((1<<2)|2);
+	// SNES separates the fall speed bits to gain an extra attribute for colour math purposes
+	weather_attribute = (weather_tile == 0x38) ? (       3) : (       2);
+	snes_weather_fall = (weather_tile == 0x38) ? ((4<<2)  ) : ((1<<2)  );
 }
 
 void flag_animate()
@@ -1716,7 +1721,11 @@ void hole_draw()
 		else // ball by itself
 			sprite_add(0x1D + (ball_s/2), ox, px, 0x00);
 	}
-	if (tee_sx < 256) sprite_add(0x30 | tee_s, (uint8)tee_sx, tee_sy, 0x02);
+	if (tee_sx < 256)
+	{
+		sprite_add(0x40 | tee_s, (uint8)tee_sx, tee_sy, 0x04); // SNES hole overlay with palette 4 to permit colour math
+		sprite_add(0x30 | tee_s, (uint8)tee_sx, tee_sy, 0x02);
+	}
 	if (status_sx < 256) sprite_add(0x3A, (uint8)status_sx, 16, 0x00);
 	
 	// cycling order of remaining sprites

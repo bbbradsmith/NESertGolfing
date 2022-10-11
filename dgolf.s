@@ -200,14 +200,20 @@ _oam: .res 256
 .export sound_update_long : far
 .export reset_stub : far
 
+.exportzp _snes_weather_fall
 .exportzp ppu_post_mode
 .export ppu_2000 : abs
 .export ppu_2005x : abs
 .export nes_apu : abs
 
+.segment "ZEROPAGE"
+
+_snes_weather_fall: .res 1
+
 .segment "SNESRAM"
 
 nes_apu:       .res 32 ; SNES emulation of NES APU
+snes_fall:     .res 256 ; SNES buffer for falling particle speed (wasteful: copies OAM structure but only uses 16 of the bytes)
 
 .p02
 
@@ -572,6 +578,8 @@ spawn:
 	sta _oam + 1, Y
 	lda _weather_attribute
 	sta _oam + 2, Y
+	lda _snes_weather_fall ; not packed into oam on SNES
+	sta snes_fall + 2, Y
 	lda _te
 	bne :+
 		jsr _prng ; X
@@ -607,7 +615,8 @@ animate_loop:
 	cmp #240
 	bcs animate_next ; inactive
 	; vertical fall (add speed stored in attribute bits)
-	lda _oam + 2, X
+	;lda _oam + 2, X
+	lda snes_fall + 2, X ; (SNES stores it separately instead of in attributes)
 	and #%00011100
 	lsr
 	lsr
