@@ -6,12 +6,8 @@
 
 ; TODO
 ; SNES additions:
-;   set colour 0 to black to be windowed off
-;   use BG2 as a solid colour background, HDMA it with sky gradient
-;   - gradient must start below the score display
 ;   use BG1 as a grain texture (maybe 2bpp x 2 via two palettes?) subtractive against BG3/OBJ
 ;   - need to add a second tee sprite with palette=4 so it can blend with BG1?
-; - L/R turn SNES additions off/on?
 
 .p816
 .a8
@@ -60,6 +56,8 @@ VRAM_NMT_BG1 = $2800
 VRAM_CHR_BG1 = $3000
 VRAM_CHR_OBJ = $4000
 
+GRADIENT_TOP = 28
+
 .segment "ZEROPAGE"
 
 snes_post_mode: .res 1
@@ -68,13 +66,19 @@ mouse_index: .res 1
 multitap_on: .res 1
 input_temp: .res 10 ; JOY1, JOY2, Mouse / JOY3, JOY4, JOY5
 gamepad_axlr: .res 1
+snes_graphics: .res 1
+snes_inidisp: .res 1 ; mirror of INIDISP
 
 .segment "SNESRAM"
 
 snes_repack:    .res 1024      ; buffer for repacking attributes/CHR
 snes_palette:   .res 512       ; buffer for translated palettes
 snes_oam:       .res 256       ; buffer for translated oam
-hdma_gradient:  .res (2*240)+3 ; Colour 0 gradient
+hdma_gradient0: .res (4*240)+4 ; Colour 0 gradient
+hdma_gradient1: .res (4*240)+4 ; double buffer
+hdma_buffer:    .res 1         ; indicates which buffer
+hdma_last0:     .res 1         ; indicates when to rebuild the gradient
+hdma_last1:     .res 1
 
 .enum
 	POST_OFF    = 1
@@ -277,6 +281,8 @@ snes_init:
 	sta a:$2105 ; BGMODE mode 1
 	stz a:$2115 ; VMAIN default increment on $2118
 	; begin
+	lda #$8F
+	sta snes_inidisp ; initialize INIDISP mirror with forced blanking on
 	lda #$80 ; NMI on, automatic joypad off (will be turned on by _input_setup)
 	sta a:$4200 ; NMITIMEN turn on NMI
 	rtl
@@ -302,6 +308,7 @@ snes_nmi:
 @post_off:
 	lda #$8F
 	sta a:$2100 ; INIDISP screen off
+	sta snes_inidisp
 	jmp @end
 @post_main:
 	jsr snes_post_send
@@ -361,11 +368,40 @@ snes_nmi:
 	lda a:ppu_2000
 	and #1
 	sta a:$210D
-	; TODO set up HDMA?
+	; HDMA channel 7 for gradient
+	lda #$03
+	sta $4370 ; DMA pattern: +0, +0, +1, +1
+	lda #$21
+	sta $4371 ; CGADD $2121 + CGDATA $2122
+	lda hdma_buffer
+	and #1
+	bne :+
+		lda #<hdma_gradient0
+		sta $4372
+		lda #>hdma_gradient0
+		bra :++
+	:
+		lda #<hdma_gradient1
+		sta $4372
+		lda #>hdma_gradient1
+	:
+	sta $4373
+	lda #^hdma_gradient0
+	sta $4374
+	; INIDISP screen on
 	lda #$0F
-	sta a:$2100 ; INIDISP screen on
+	sta a:$2100
+	sta snes_inidisp
 	stz z:ppu_post_mode
 @end:
+	ldx #0
+	lda snes_inidisp
+	bmi :+ ; forced blank. don't enable HDMA
+	lda snes_graphics
+	beq :+
+		ldx #$80
+	:
+	stx a:$420C ; HDMA on or off depending on snes_graphics setting
 	jsr input_update
 	jsl sound_update_long ; updates nes_apu
 	jsr spc_update
@@ -648,6 +684,18 @@ snes_input_poll: ; copies NMI polled results
 	beq :+
 		asl ; remap to B
 		tsb z:_gamepad
+	:
+	; L/R enable/disable SNES graphics
+	lda z:gamepad_axlr
+	and #$10 ; R
+	beq :+
+		lda #1
+		sta z:snes_graphics
+	:
+	lda z:gamepad_axlr
+	and #$20 ; L
+	beq :+
+		stz z:snes_graphics
 	:
 	; done
 	rtl
@@ -1175,7 +1223,172 @@ snes_post_remap: ; A=source POST enum, translates PPU update, returns SNES POST 
 	lda #POST_UPDATE
 	rts
 
+snes_build_hdma_gradient: ; takes about 1/2 of a frame, but doesn't happen often (and never during gameplay)
+	.a8
+	.i8
+	; flip buffer
+	lda hdma_buffer
+	eor #1
+	and #1
+	sta hdma_buffer
+	; ptr1/ptr2: fetch target colours: palette 0 = top, palette 16 = bottom
+	ldx _palette+0
+	stx hdma_last0
+	lda snes_pal0, X ; gggrrrrr
+	sta ptr1+0
+	lda snes_pal1, X ; 0bbbbbgg
+	sta ptr1+1
+	ldx _palette+16
+	stx hdma_last1
+	lda snes_pal0, X
+	sta ptr2+0
+	lda snes_pal1, X
+	sta ptr2+1
+	; _mx,_nx, _ox = starting RGB
+	rep #$20
+	.a16
+	lda ptr1
+	xba
+	and #$1F00
+	sta _mx ; _mx = red << 8
+	lda ptr1
+	asl
+	asl
+	asl
+	and #$1F00
+	sta _nx ; _nx = green << 8
+	lda ptr1
+	lsr
+	lsr
+	and #$1F00
+	sta _ox ; _ox = blue << 8
+	; _px, _ux, _vx = RGB increment per line
+	lda ptr2
+	xba
+	and #$1F00
+	sec
+	sbc _mx
+	jsr @div_gradient
+	sta _px ; 256 * ((target red - start red) / lines)
+	lda ptr2
+	asl
+	asl
+	asl
+	and #$1F00
+	sec
+	sbc _nx
+	jsr @div_gradient
+	sta _ux
+	lda ptr2
+	lsr
+	lsr
+	and #$1F00
+	sec
+	sbc _ox
+	jsr @div_gradient
+	sta _vx
+	; build HDMA buffer
+	rep #$10
+	.i16
+	ldx #0
+	lda hdma_buffer
+	and #1
+	beq :+
+		ldx #(hdma_gradient1-hdma_gradient0)
+	:
+	lda #GRADIENT_TOP-1 ; hold first colour for this many lines
+	and #$00FF
+	sta hdma_gradient0+0, X
+	;stz hdma_gradient0+1, X ; initialized as 0, sets CGADD
+	lda ptr1
+	sta hdma_gradient0+3, X ; CGCOL for scanline 0
+	lda #$80 | 120
+	sta hdma_gradient0+5, X ; do 120 lines
+	lda #$80 | (240-(120+GRADIENT_TOP))
+	sta hdma_gradient0+6+(120*4), X
+	txa
+	clc
+	adc #6
+	tax
+	ldy #120
+	jsr @row_gradient
+	inx ; skip line count byte
+	ldy #(240-(120+GRADIENT_TOP))
+	jsr @row_gradient
+	sep #$30
+	.a8
+	.i8
+	rts
+@row_gradient: ; build Y rows of gradient starting at X position, clobbers ptr3
+	.a16
+	.i16
+	lda _px
+	clc
+	adc _mx
+	sta _mx
+	lda _ux
+	clc
+	adc _nx
+	sta _nx
+	lda _vx
+	clc
+	adc _ox
+	sta _ox
+	and #$1F00
+	asl
+	asl
+	sta ptr3   ; 0bbbbb00.00000000
+	lda _nx
+	and #$1F00
+	lsr
+	lsr
+	lsr
+	ora ptr3
+	sta ptr3   ; 0bbbbbgg.ggg00000
+	lda _mx
+	and #$1F00
+	xba
+	ora ptr3   ; 0bbbbbgg.gggrrrrr
+	sta hdma_gradient0+2, X
+	inx
+	inx
+	inx
+	inx
+	dey
+	bne @row_gradient
+	rts
+@div_gradient:
+	.a16
+	.i8
+	GRADIENT_DIV = 240-GRADIENT_TOP
+	ldy #0 ; Y=0 no invert
+	cmp #$8000
+	bcc :+
+		eor #$FFFF
+		inc
+		iny ; Y=1 invert (to keep division unsigned)
+	:
+	sta $4204 ; WRDIVL/H
+	ldx #GRADIENT_DIV
+	stx $4206 ; WRDIVB
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	lda $4214 ; RDDIV
+	dey
+	bne :+ ; undo invert
+		eor #$FFFF
+		inc
+	:
+	rts
+
 snes_post_send: ; A = update type
+	.a8
+	.i8
 	cmp #POST_UPDATE
 	beq @update
 	cmp #POST_DOUBLE
@@ -1291,7 +1504,9 @@ snes_ppu_post:
 	lda #^snes_pal0
 	pha
 	plb
+	; palette 16 isn't used but is useful for debugging the HDMA gradient
 	PALETTE_TRANSLATE  0,  0
+	PALETTE_TRANSLATE 16, 16
 	; BG is really 1bpp, only needs 1 colour per palette
 	PALETTE_TRANSLATE  0+1,  0+1
 	PALETTE_TRANSLATE  0+3,  0+3
@@ -1329,7 +1544,16 @@ snes_ppu_post:
 		iny
 		iny
 		bne :-
-	; TODO build HDMA gradient
+	; rebuild HDMA gradient if changed
+	lda _palette+0
+	cmp hdma_last0
+	bne :+
+	lda _palette+16
+	cmp hdma_last1
+	beq :++
+	:
+		jsr snes_build_hdma_gradient
+	:
 	lda z:ppu_post_mode
 	jsr snes_post_remap
 	sta z:snes_post_mode

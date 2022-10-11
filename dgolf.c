@@ -111,7 +111,6 @@ extern void snes_ppu_fill(uint16 addr, uint8 value, uint16 count); // use for NE
 extern void snes_ppu_fill_2119(uint16 addr, uint8 value, uint16 count); // special writes for SNES
 extern void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count); // translates NES attributes to SNES
 
-
 // POST_OFF     turn off rendering
 // POST_NONE    turn on, no other updates
 // POST_UPDATE  turn on, palette, send
@@ -335,6 +334,7 @@ uint16 weather_wind_timeout;
 uint8 pal_floor;
 uint8 pal_sky;
 uint8 pal_text;
+uint8 pal_grad; // SNES gradient
 
 uint8 course;
 uint8 field_set;
@@ -523,9 +523,9 @@ uint16 mag_squared_s8(sint8 x, sint8 y)
 // graphical stuff
 //
 
-void palette_generate(uint8 sky, uint8 ground, uint8 text)
+void palette_generate(uint8 sky, uint8 ground, uint8 text, uint8 gradient)
 {
-	palette[ 0] = palette[16] =
+	palette[ 0] = //palette[16] =
 	palette[ 2] = palette[10] =
 	palette[ 5] = palette[13] = sky;
 	palette[26] =
@@ -534,6 +534,7 @@ void palette_generate(uint8 sky, uint8 ground, uint8 text)
 	palette[ 1] = palette[ 3] =
 	palette[ 6] = palette[ 7] = text;
 	//palette[26] = 0x21; // for debugging tee
+	palette[16] = gradient; // SNES uses this for gradient
 	
 	if (ocean_attribute != 255)
 	{
@@ -710,6 +711,7 @@ const uint8 set_f[16] = { 0x30, 0x1A, 0x17, 0x25, 0x07, 0x19, 0x13, 0x27, 0x30, 
 const uint8 set_s[16] = { 0x21, 0x2B, 0x27, 0x35, 0x17, 0x21, 0x23, 0x37, 0x0F, 0x0B, 0x0F, 0x05, 0x0F, 0x09, 0x03, 0x01 };
 const uint8 set_t[16] = { 0x0F, 0x30, 0x0F, 0x0F, 0x30, 0x0F, 0x0F, 0x0F, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30 };
 const uint8 set_w[16] = { 0x39, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x39, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8 set_g[16] = { 0x11, 0x3B, 0x37, 0x30, 0x27, 0x31, 0x33, 0x30, 0x05, 0x0F, 0x06, 0x0F, 0x0C, 0x0F, 0x0F, 0x21 }; // SNES sky gradient
 
 // 18 hole repeating course terrain structure
 
@@ -792,31 +794,36 @@ void hole_next()
 void transition_animate()
 {
 	uint8 s, f;
+	uint8 g;
 
 	--transition;
 	if (transition == ((TRANSITION_TIME*3)/4))
 	{
 		s = blend25(pal_sky,   set_s[field_set]);
 		f = blend25(pal_floor, set_f[field_set]);
-		palette_generate(s,f,s);
+		g = blend25(pal_grad,  set_g[field_set]);
+		palette_generate(s,f,s,g);
 	}
 	else if (transition == ((TRANSITION_TIME*2)/4))
 	{
 		s = blend50(pal_sky,   set_s[field_set]);
 		f = blend50(pal_floor, set_f[field_set]);
-		palette_generate(s,f,s);
+		g = blend50(pal_grad,  set_g[field_set]);
+		palette_generate(s,f,s,g);
 	}
 	else if (transition == ((TRANSITION_TIME*1)/4))
 	{
 		s = blend25(set_s[field_set], pal_sky);
 		f = blend25(set_f[field_set], pal_floor);
-		palette_generate(s,f,s);
+		g = blend25(set_g[field_set], pal_grad);
+		palette_generate(s,f,s,g);
 	}
 	else if (transition == 0)
 	{
 		pal_sky   = set_s[field_set];
 		pal_floor = set_f[field_set];
-		palette_generate(pal_sky, pal_floor, pal_sky);
+		pal_grad  = set_g[field_set];
+		palette_generate(pal_sky, pal_floor, pal_sky, pal_grad);
 	}
 }
 
@@ -1129,6 +1136,7 @@ void title()
 	pal_floor    = set_f[field_set];
 	pal_sky      = set_s[field_set];
 	pal_text     = set_t[field_set];
+	pal_grad     = set_g[field_set];
 	weather_tile = set_w[field_set];
 	weather_rate_mask = 3;
 	weather_rate_min = weather_tile ? 4 : 0;
@@ -1226,7 +1234,7 @@ void title()
 	else
 		ppu_text(help_text_te, 0x2400 + 2 + (2 * 32));
 
-	palette_generate(pal_sky, pal_floor, pal_text);
+	palette_generate(pal_sky, pal_floor, pal_text, pal_grad);
 
 	title_menu = 0;
 
@@ -1822,11 +1830,11 @@ void status_bar_fade_in()
 	pal_text = set_t[field_set];
 	status_draw();
 	hole_draw(); frame_double();
-	palette_generate(pal_sky, pal_floor, blend25(pal_sky, pal_text)); hole_draw(); frames(2);
-	palette_generate(pal_sky, pal_floor, blend50(pal_sky, pal_text)); hole_draw(); frames(2);
-	palette_generate(pal_sky, pal_floor, blend25(pal_text, pal_sky)); hole_draw(); frame();
+	palette_generate(pal_sky, pal_floor, blend25(pal_sky, pal_text), pal_grad); hole_draw(); frames(2);
+	palette_generate(pal_sky, pal_floor, blend50(pal_sky, pal_text), pal_grad); hole_draw(); frames(2);
+	palette_generate(pal_sky, pal_floor, blend25(pal_text, pal_sky), pal_grad); hole_draw(); frame();
 	input_poll(); hole_draw(); frame(); // clear pending input
-	palette_generate(pal_sky, pal_floor, pal_text);
+	palette_generate(pal_sky, pal_floor, pal_text, pal_grad);
 }
 
 void hole_play()
@@ -2311,10 +2319,10 @@ void hole_play()
 	flag_remove = 1;
 	if (!first_stroke) // if they got a hole in 1, stroke status hasn't been faded in, so skip this fadeout
 	{
-		palette_generate(pal_sky, pal_floor, blend25(pal_text, pal_sky)); hole_draw(); frame(); hole_draw(); frame();
-		palette_generate(pal_sky, pal_floor, blend50(pal_sky, pal_text)); hole_draw(); frame(); hole_draw(); frame();
-		palette_generate(pal_sky, pal_floor, blend25(pal_sky, pal_text)); hole_draw(); frame(); hole_draw(); frame();
-		palette_generate(pal_sky, pal_floor, pal_sky                   );
+		palette_generate(pal_sky, pal_floor, blend25(pal_text, pal_sky), pal_grad); hole_draw(); frame(); hole_draw(); frame();
+		palette_generate(pal_sky, pal_floor, blend50(pal_sky, pal_text), pal_grad); hole_draw(); frame(); hole_draw(); frame();
+		palette_generate(pal_sky, pal_floor, blend25(pal_sky, pal_text), pal_grad); hole_draw(); frame(); hole_draw(); frame();
+		palette_generate(pal_sky, pal_floor, pal_sky,                    pal_grad);
 	}
 	else first_stroke = 0;
 	// wait for flag to finish leaving
