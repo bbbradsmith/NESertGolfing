@@ -1287,6 +1287,32 @@ snes_build_hdma_gradient: ; takes about 1/2 of a frame, but doesn't happen often
 	sbc _ox
 	jsr @div_gradient
 	sta _vx
+	; if all are 0 add an artificial gradient
+	lda _px
+	ora _ux
+	ora _vx
+	bne @build
+	ldx #0
+	.assert (_nx = _mx+2), error, "temporary gradient variables are not contiguous"
+	.assert (_ox = _nx+2), error, "temporary gradient variables are not contiguous"
+	.assert (_ux = _px+2), error, "temporary gradient variables are not contiguous"
+	.assert (_vx = _ux+2), error, "temporary gradient variables are not contiguous"
+	@artificial:
+		lda _mx, X
+		cmp #$1000
+		bcs :+
+			lda #$0004
+			bra :++
+		:
+			lda #.loword(-$0004)
+		:
+		sta _px, X
+		inx
+		inx
+		cpx #6
+		bcc @artificial
+	lda _mx
+@build:
 	; build HDMA buffer
 	rep #$10
 	.i16
