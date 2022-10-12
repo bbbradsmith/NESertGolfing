@@ -2321,6 +2321,7 @@ void hole_play()
 	{
 		hole_draw();
 		frame();
+		input_poll(); // allow reset
 	}
 
 	// 6. fade out status bar, remove flag
