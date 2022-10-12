@@ -102,7 +102,7 @@ extern void ppu_scroll_x(uint16 x);
 //extern void ppu_scroll_y(uint16 y);
 extern void ppu_post(uint8 mode); // waits for next frame and posts PPU update
 //extern void ppu_profile(uint8 emphasis); // immediate $2001 write, OR with current mask (use bit 0 for greyscale)
-//extern void ppu_apply_direction(uint8 vertical); // immediately set write increment direction
+extern void ppu_apply_direction(uint8 vertical); // immediately set write increment direction
 extern void ppu_apply(); // immediately uploads ppu_send to $2007, resets ppu_send_count to 0
 
 // SNES extensions
@@ -111,7 +111,9 @@ extern void snes_ppu_fill(uint16 addr, uint8 value, uint16 count); // use for NE
 extern void snes_ppu_fill_2119(uint16 addr, uint8 value, uint16 count); // special writes for SNES
 extern void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count); // translates NES attributes to SNES
 extern uint8 snes_weather_fall;
+extern uint8 snes_texture; // 0-3 applies terrain texture
 #pragma zpsym("snes_weather_fall")
+#pragma zpsym("snes_texture")
 
 // POST_OFF     turn off rendering
 // POST_NONE    turn on, no other updates
@@ -337,6 +339,7 @@ uint8 pal_floor;
 uint8 pal_sky;
 uint8 pal_text;
 uint8 pal_grad; // SNES gradient
+uint8 pal_texture; // SNES texture next
 
 uint8 course;
 uint8 field_set;
@@ -519,6 +522,12 @@ uint16 mag_squared_s8(sint8 x, sint8 y)
 	if (x < 0) x = -x;
 	if (y < 0) y = -y;
 	return ((uint16)x * x) + ((uint16)y * y);
+}
+
+void pal_texture_assign() // derives pal_texture from seed (without changing it)
+{
+	i = seed;
+	pal_texture = (i ^ (i >> 2) ^ (i >> 4) ^ (i >> 6)) & 3;
 }
 
 //
@@ -819,6 +828,7 @@ void transition_animate()
 		f = blend25(set_f[field_set], pal_floor);
 		g = blend25(set_g[field_set], pal_grad);
 		palette_generate(s,f,s,g);
+		snes_texture = pal_texture;
 	}
 	else if (transition == 0)
 	{
@@ -826,6 +836,7 @@ void transition_animate()
 		pal_floor = set_f[field_set];
 		pal_grad  = set_g[field_set];
 		palette_generate(pal_sky, pal_floor, pal_sky, pal_grad);
+		snes_texture = pal_texture;
 	}
 }
 
@@ -1152,6 +1163,8 @@ void title()
 	transition = 0;
 	transition_time = (prng() & 7) + 3;
 	day = prng() & 7;
+	pal_texture_assign();
+	snes_texture = pal_texture;
 
 	// keep hole and start off the field for menu
 	hole_cx = 512;
@@ -1183,7 +1196,7 @@ void title()
 			if (j>0) ppu_apply();
 		}
 	}
-	//ppu_apply_direction(0);
+	ppu_apply_direction(0);
 
 	// title
 	if (!te)
@@ -2355,6 +2368,11 @@ void hole_play()
 	{
 		field_set = (prng() & 7) | (field_set & 8); // random but don't switch day/night
 		transition_time = (prng() & 7) + 3;
+		// new texture after transition, but only if the floor colour changes
+		if (pal_floor != set_f[field_set])
+		{
+			pal_texture_assign();
+		}
 	field_change:
 		transition = TRANSITION_TIME;
 		i = set_w[field_set];

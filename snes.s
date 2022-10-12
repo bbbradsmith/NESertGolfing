@@ -4,11 +4,6 @@
 ; http://rainwarrior.ca
 ;
 
-; TODO
-; SNES additions:
-;   use BG1 as a grain texture (maybe 2bpp x 2 via two palettes?) subtractive against BG3/OBJ
-;   - need to add a second tee sprite with palette=4 so it can blend with BG1?
-
 .p816
 .a8
 .i8
@@ -35,6 +30,8 @@
 
 .import sound_update_long : far
 .import reset_stub : far
+
+.exportzp _snes_texture
 
 .export snes_reset : far
 .export snes_init : far
@@ -69,6 +66,8 @@ input_temp: .res 10 ; JOY1, JOY2, Mouse / JOY3, JOY4, JOY5
 gamepad_axlr: .res 1
 snes_graphics: .res 1
 snes_inidisp: .res 1 ; mirror of INIDISP
+_snes_texture: .res 1
+snes_texture_last: .res 1
 
 .segment "SNESRAM"
 
@@ -269,8 +268,8 @@ snes_init:
 	; subtractive colour math for BG1
 	lda #%00000010
 	sta a:$2130 ; CGWSEL subscreen
-	lda #%10000100
-	sta a:$2131 ; CGADSUB subtract from BG3 only
+	lda #%10010100
+	sta a:$2131 ; CGADSUB subtract from BG3+OBJ only
 	; global screen settings
 	lda #$04
 	sta a:$2133 ; SETINI overscan 239 lines mode
@@ -281,6 +280,10 @@ snes_init:
 	lda #$01
 	sta a:$2105 ; BGMODE mode 1
 	stz a:$2115 ; VMAIN default increment on $2118
+	; set up BG1 CHR and nametable for textured ground
+	jsr snes_texture_init
+	lda #1
+	sta snes_graphics ; on by default
 	; begin
 	lda #$8F
 	sta snes_inidisp ; initialize INIDISP mirror with forced blanking on
@@ -342,8 +345,8 @@ snes_nmi:
 	stx a:$2121 ; CGADD = 0
 	lda #.loword(snes_palette)
 	sta a:$4302
-	ldx #32*2
-	stx a:$4305 ; 32 colours
+	ldx #33*2
+	stx a:$4305 ; 33 colours
 	ldx #1
 	stx a:$420B
 	; OBJ palettes
@@ -399,7 +402,12 @@ snes_nmi:
 	lda snes_inidisp
 	bmi :+ ; forced blank. don't enable HDMA
 	lda snes_graphics
-	beq :+
+	bne :+
+		stz a:$212D ; TS off
+		bra :++
+	:
+		lda #%00000001
+		sta a:$212D ; TS BG1
 		ldx #$80
 	:
 	stx a:$420C ; HDMA on or off depending on snes_graphics setting
@@ -836,6 +844,100 @@ spc_update:
 ; ====================
 ; NESert Golfing Stuff
 ; ====================
+
+; textures for BG1
+
+texture_chr:
+	.incbin "texture.chr"
+	TEXTURE_CHR_SIZE = * - texture_chr
+
+texture_pal:
+	.incbin "texture.pal"
+
+texture_nmt:
+; $00-0F $00-0F
+; $10-1F $10-1F
+; $20-2F $20-2F
+; $30-3F $30-3F
+; then the same but shifted by 8
+.repeat 128, I
+	.byte ((I & ~31) >> 1) | ((I+0) & 15), 1 << 2
+.endrepeat
+.repeat 128, I
+	.byte ((I & ~31) >> 1) | ((I+8) & 15), 1 << 2
+.endrepeat
+
+snes_texture_init:
+	.a8
+	.i8
+	lda #$80
+	sta $2115 ; VMAIN increment on $2119
+	rep #$20
+	.a16
+	; DMA to load CHR
+	lda #VRAM_CHR_BG1
+	sta $2116 ; VMADD
+	ldx #%00000001 ; 2-to-2, no increment
+	stx $4300
+	ldx #$18 ; $2118 VMDATA
+	stx $4301
+	lda #.loword(texture_chr)
+	sta $4302
+	ldx #^texture_chr
+	stx $4304
+	lda #TEXTURE_CHR_SIZE
+	sta $4305
+	ldx #1
+	stx $420B
+	; setup nametable (4 copies of 512 bytes)
+	lda #VRAM_NMT_BG1
+	sta $2116 ; VMADD
+	ldy #4
+	:
+		lda #.loword(texture_nmt)
+		sta $4302
+		lda #512
+		sta $4305
+		ldx #1
+		stx $420B
+		dey
+		bne :-
+	sep #$30
+	.a8
+	.i8
+	stz $2115 ; VMAIN default increment on $2118
+	lda #$FF
+	sta snes_texture_last
+	rts
+
+snes_texture_palette:
+	.a8
+	.i8
+	ldx _snes_texture
+	stx snes_texture_last
+	rep #$30
+	.a16
+	.i16
+	; copy: texture_pal+(32*_snes_texture) -> snes_palette+32
+	txa
+	and #3
+	asl
+	asl
+	asl
+	asl
+	asl
+	clc
+	adc #.loword(texture_pal)
+	tax
+	ldy #.loword(snes_palette+32)
+	lda #32-1
+	phb
+	.byte $54, ^snes_palette, ^texture_pal ; ca65 MVN syntax pre-V2.18 is inconsistent, doing it manually
+	plb
+	sep #$30
+	.a8
+	.i8	
+	rts
 
 ; NES to SNES palette conversion
 snes_pal0: ; gggrrrrr
@@ -1555,7 +1657,7 @@ snes_ppu_post:
 	plb
 	; palette 16 isn't used but is useful for debugging the HDMA gradient
 	PALETTE_TRANSLATE  0,  0
-	PALETTE_TRANSLATE 16, 16
+	PALETTE_TRANSLATE 16, 32
 	; BG is really 1bpp, only needs 1 colour per palette
 	PALETTE_TRANSLATE  0+1,  0+1
 	PALETTE_TRANSLATE  0+3,  0+3
@@ -1597,7 +1699,7 @@ snes_ppu_post:
 		bne :-
 	; rebuild HDMA gradient if changed
 	lda snes_graphics
-	beq :++
+	beq @post
 	lda _palette+0
 	cmp hdma_last0
 	bne :+
@@ -1607,6 +1709,12 @@ snes_ppu_post:
 	:
 		jsr snes_build_hdma_gradient
 	:
+	lda _snes_texture
+	cmp snes_texture_last
+	beq :+
+		jsr snes_texture_palette
+	:
+@post:
 	lda z:ppu_post_mode
 	jsr snes_post_remap
 	sta z:snes_post_mode

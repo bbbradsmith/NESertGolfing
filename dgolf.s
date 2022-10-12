@@ -1380,7 +1380,7 @@ sound_deliver_apu:
 ;.export _ppu_scroll_y
 .export _ppu_post
 ;.export _ppu_profile
-;.export _ppu_apply_direction
+.export _ppu_apply_direction
 .export _ppu_apply
 
 .import _main
@@ -1437,6 +1437,16 @@ _ppu_post:
 	:
 		lda ppu_post_mode
 		bne :-
+	rts
+
+_ppu_apply_direction:
+	jsr _ppu_direction
+	lda ppu_2000
+	and #%00000100
+	beq :+
+		lda #$01 ; increment 32 bytes
+	:
+	sta a:$2115 ; VMAIN
 	rts
 
 _ppu_apply:
