@@ -1,5 +1,14 @@
 # NESert Golfing Tournament Edition
 
+The tournament edition has now been merged into
+the [regular game ROM](https://github.com/bbbradsmith/NESertGolfing).
+
+Select "Help" from the menu, press and hold A, then press SELECT to switch to Tournament Edition.
+
+This branch is now an archive of the original separate Tournament Edition release.
+
+## Original description below
+
 This is an alternate version of
 [NESert Golfing](https://github.com/bbbradsmith/NESertGolfing)
 intended for competition. All of the random hole generation and weather
