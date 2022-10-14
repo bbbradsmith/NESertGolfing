@@ -19,10 +19,6 @@ const char rom_version[] = " ################  "
 #define ASSERT(__c__) {}
 //#define ASSERT(__c__) { debug_assert(__c__); }
 
-// for debugging graphics in left column
-//#define SHOW_LEFT_COLUMN 1
-#define SHOW_LEFT_COLUMN 0
-
 // for testing the last hole
 //#define LAST_HOLE_TEST 3
 #define LAST_HOLE_TEST 0
@@ -112,8 +108,10 @@ extern void snes_ppu_fill_2119(uint16 addr, uint8 value, uint16 count); // speci
 extern void snes_ppu_fill_att(uint16 addr, uint8 value, uint16 count); // translates NES attributes to SNES
 extern uint8 snes_weather_fall;
 extern uint8 snes_texture; // 0-3 applies terrain texture
+extern uint16 snes_ocean_x;
 #pragma zpsym("snes_weather_fall")
 #pragma zpsym("snes_texture")
+#pragma zpsym("snes_ocean_x");
 
 // POST_OFF     turn off rendering
 // POST_NONE    turn on, no other updates
@@ -679,6 +677,7 @@ void floor_build_pixel()
 			fg_last = fg_next = OCEAN_FLOOR * 256U;
 			fg_angle = 0;
 			palette[3] = WATER_COLOUR;
+			snes_ocean_x = 256+16;
 			goto build;
 		}
 		
@@ -1165,6 +1164,7 @@ void title()
 	day = prng() & 7;
 	pal_texture_assign();
 	snes_texture = pal_texture;
+	snes_ocean_x = 256; // offscreen
 
 	// keep hole and start off the field for menu
 	hole_cx = 512;
@@ -1623,6 +1623,7 @@ void hole_shift()
 	balls_wx[2] -= 1;
 	balls_wx[4] -= 1;
 	balls_wx[6] -= 1;
+	if (ocean_attribute != 255) --snes_ocean_x;
 }
 
 void hole_draw_flag()

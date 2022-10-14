@@ -32,6 +32,7 @@
 .import reset_stub : far
 
 .exportzp _snes_texture
+.exportzp _snes_ocean_x
 
 .export snes_reset : far
 .export snes_init : far
@@ -68,6 +69,7 @@ snes_graphics: .res 1
 snes_inidisp: .res 1 ; mirror of INIDISP
 _snes_texture: .res 1
 snes_texture_last: .res 1
+_snes_ocean_x: .res 2
 
 .segment "SNESRAM"
 
@@ -251,15 +253,20 @@ snes_init:
 	lda #((VRAM_CHR_OBJ >> 13) | $00)
 	sta a:$2101 ; OBJSEL 8x8 + 16x16 sprites
 	; window to remove the left 8 pixels
+	lda #%00101010
+	sta a:$2123 ; W12SEL enable window 1 for all BG, window 2 for BG1
 	lda #%00100010
-	sta a:$2123 ; W12SEL enable window 1 for all BG
-	sta a:$2124 ; W23SEL
+	sta a:$2124 ; W23SEL enable window 1 for all BG
 	lda #%00000010
 	sta a:$2125 ; WOBJSEL enable window 1 for OBJ
 	lda #0
 	sta a:$2126 ; WH0 window 1 left
 	lda #7
 	sta a:$2127 ; WH1 window 1 right
+	lda #255
+	sta a:$2128 ; WH2 window 2 left
+	stz a:$2129 ; WH3 window 2 right (< left to hide window at start)
+	; WH2/WH3 set in vblank to mask ocean
 	stz a:$212A ; WBGLOG OR logic
 	stz a:$212B ; WOBJLOG OR logic
 	lda #%00011111
@@ -361,6 +368,18 @@ snes_nmi:
 	sep #$20
 	.a8
 @post_on:
+	lda _snes_ocean_x+1 ; >= 256 is offscreen
+	beq :+
+		lda #255
+		sta a:$2128 ; WH2
+		stz a:$2129 ; WH3 (hide window)
+		bra :++
+	:
+		lda _snes_ocean_x+0
+		sta a:$2128 ; WH2
+		lda #255
+		sta a:$2129 ; WH3
+	:
 	; set horizontal scroll
 	lda a:ppu_2005x
 	sta a:$2111 ; BG3HOFS
