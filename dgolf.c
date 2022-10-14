@@ -676,7 +676,7 @@ void floor_build_pixel()
 		if (hole == 0)
 		{
 			ocean_attribute = ((floor_column + 1) / 4) & 15;
-			fg_last = fg_next = OCEAN_FLOOR * 256;
+			fg_last = fg_next = OCEAN_FLOOR * 256U;
 			fg_angle = 0;
 			palette[3] = WATER_COLOUR;
 			goto build;
@@ -784,7 +784,7 @@ void hole_next()
 		// final hole must fall on 32-pixel attribute boundary
 		while (((scroll_cx + (l*8)) & 24) != 0) ++l;
 		// force terrain to go down toward ocean
-		fg_min = (GLOBAL_FLOOR - 8) * 256;
+		fg_min = (GLOBAL_FLOOR - 8) * 256U;
 		floor_build_pixel_calculate_range();
 	}
 
@@ -1172,18 +1172,18 @@ void title()
 
 	// build initial floor
 	fg_cx = 256;
-	fg_max = GLOBAL_FLOOR * 256; // global maximum
-	fg_min = (192+3) * 256; // 3 pixels below help text
+	fg_max = GLOBAL_FLOOR * 256U; // global maximum
+	fg_min = (192+3) * 256U; // 3 pixels below help text
 	fg_angle_mask = 0x80 | 0x3F; // shallow hills
 	floor_build_pixel_calculate_range();
 	fg_hold_mask = 7; // short hills
 	fg_last = fg_min + (prng() % (fg_max - fg_min));
 	fg_hold = 0;
 	for (mx = 0; mx < 256; ++mx) floor_build_pixel();
-	fg_min = (176+3) * 256; // 3 pixels below menu
+	fg_min = (176+3) * 256U; // 3 pixels below menu
 	floor_build_pixel_calculate_range();
 	for (mx = 0; mx < 256; ++mx) floor_build_pixel();
-	fg_min = 48 * 256; // global minimum
+	fg_min = 48 * 256U; // global minimum
 	floor_build_pixel_calculate_range();
 
 	// render initial floor
@@ -1419,7 +1419,7 @@ void title()
 	balls_x[0] =
 	balls_x[1] =
 	balls_x[2] =
-	balls_x[3] = 256 * 256;
+	balls_x[3] = 256 * 256UL;
 	balls_y[0] =
 	balls_y[1] =
 	balls_y[2] =
@@ -1957,7 +1957,7 @@ void hole_play()
 	while (cleared < 0x10)
 	{
 		// if centre of ball is offscreen, put it back on the tee
-		if (balls_x[player] >= (253*256) || balls_x[player] < (5*256))
+		if (balls_x[player] >= (253*256UL) || balls_x[player] < (5*256UL))
 		{
 			if (players > 1) // extra time to keep prompt jingle from cutting rudely
 			{
@@ -1967,7 +1967,7 @@ void hole_play()
 				hole_draw(); frames(2);
 			}
 			sound_play(SFX_RESPAWN);
-			balls_x[player] = tee_sx * 256;
+			balls_x[player] = tee_sx * 256UL;
 			balls_y[player] = tee_sy - 6;
 		}
 
@@ -2055,7 +2055,7 @@ void hole_play()
 	//ball_fly:
 		sound_play(SFX_STROKE);
 		ball_x = balls_x[player];
-		ball_y = balls_y[player] * 256;
+		ball_y = balls_y[player] * 256UL;
 		ball_vx = -swing_x / 2; // divider of swing controls max velocity
 		ball_vy = -swing_y / 2;
 		timeout = 0;
@@ -2097,19 +2097,19 @@ void hole_play()
 			balls_x[player] = ball_x;
 			balls_y[player] = ball_y / 256;
 
-			if (ball_y >= (256*256))
+			if (ball_y >= (256*256UL))
 			{
 				balls_hx[player*4] = 1; // offscreen
 				goto collide_skip;
 			}
 
 			// final hole water test
-			if (hole == 0 && ball_y >= ((OCEAN_FLOOR-6)*256))
+			if (hole == 0 && ball_y >= ((OCEAN_FLOOR-6)*256U))
 			{
 				hole_splash(); // pause for a little splash animation
 				cleared |= (1 << player);
 				splash_s = 0; // clear splash
-				ball_x = 256*256;
+				ball_x = 256*256UL;
 				balls_hx[player*4] = 1; // move ball offscreen
 				break;
 			}
@@ -2154,14 +2154,14 @@ void hole_play()
 			// (this speeds up recovery for the next shot, but also avoids
 			// a problem calculating tsx/tsy below that causes it to slip past
 			// the radius of ejection and ending up in free fall)
-			if (ball_x >= (256*256)) break;
+			if (ball_x >= (256*256UL)) break;
 
 			// px = index of floor
 			i = floor_a[px]; // i = angle lookup for floor slope
 			norm_x = read_norm_x(i);
 			norm_y = read_norm_y(i);
 			mx = (((px - scroll_cx) & 255) * 256) + 128; // midpoint of floor column
-			nx = floor_y[px] * 256;
+			nx = floor_y[px] * 256U;
 
 			// 1. eject ball from overlap with the floor plane
 
@@ -2266,9 +2266,9 @@ void hole_play()
 			++timeout;
 			if (timeout >= TIMEOUT || rollout >= ROLLOUT)
 			{
-				if ((balls_hx[player*4] != 0) || (ball_y >= (256*256)))
+				if ((balls_hx[player*4] != 0) || (ball_y >= (256*256UL)))
 				{
-					balls_x[player] = 256*256; // force offscreen, will reload position next swing
+					balls_x[player] = 256*256UL; // force offscreen, will reload position next swing
 					break; // just immediately end
 				}
 				// onscreen: slide down 1 pixel per frame until we're done
