@@ -867,6 +867,11 @@ texture_nmt:
 	.byte ((I & ~31) >> 1) | ((I+8) & 15), 1 << 2
 .endrepeat
 
+texture_nmt_blank: ; row of blank tiles
+.repeat 32
+	.byte $40, 1<<2
+.endrepeat
+
 snes_texture_init:
 	.a8
 	.i8
@@ -902,6 +907,15 @@ snes_texture_init:
 		stx $420B
 		dey
 		bne :-
+	; blank row 2 of texture nametable (prevents texture on score)
+	lda #VRAM_NMT_BG1+(2*32)
+	sta $2116
+	;lda #.loword(texture_blank) ; already follows texture_chr
+	;sta $4302
+	lda #64
+	sta $4305
+	ldx #1
+	stx $420B
 	sep #$30
 	.a8
 	.i8
@@ -909,6 +923,8 @@ snes_texture_init:
 	lda #$FF
 	sta snes_texture_last
 	rts
+@byte_00:
+	.byte $00
 
 snes_texture_palette:
 	.a8
