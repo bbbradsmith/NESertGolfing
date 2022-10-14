@@ -9,6 +9,10 @@ H = 32
 WS = 256 // W
 HS = 256 // H
 
+# Set to none to try a randomized seed
+#SEED = None
+SEED = 0x6B1519D0
+
 houndstooth = \
     "** *****" + \
     "* ******" + \
@@ -192,9 +196,17 @@ def pattern_voronoi(x,y):
         return 1
     return 0
 
+#
+# Main
+#
+
+if SEED == None:
+    SEED = random.randint(0,(1<<32)-1)
+random.seed(SEED)   
+
 generators = [
-    #(pattern_houndstooth,0,0,0,0),
-    (pattern_battenburg,0,0,0,0),
+    (pattern_houndstooth,0,0,0,0),
+    #(pattern_battenburg,0,0,0,0),
     (pattern_spots,8,8,10,50),
     (pattern_voronoi,13,0,0,25),
     #(pattern_spots,300,1,1,5),
@@ -208,8 +220,8 @@ for i in range(len(generators)):
     spaced_points(pcount,pmin,pmax,pscale)
     img = generate(g)
     generated.append(img)
-    img.save("texture.%d.png" % i)
-    tile_preview(img,WS,HS,W//2).save("texture_tile.%d.png" % i)
+    img.save("temp/texture.%d.png" % i)
+    tile_preview(img,WS,HS,W//2).save("temp/texture_tile.%d.png" % i)
 
 texture_chr = bytearray()
 for ty in range(0,H,8):
@@ -242,3 +254,5 @@ for i in range(4):
             texture_pal.append(0x04)
 open("texture.pal","wb").write(texture_pal)
 print("TEXTURE.PAL")
+
+print("SEED: 0x%08X" % (SEED))

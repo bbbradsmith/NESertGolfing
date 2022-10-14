@@ -13,5 +13,5 @@ cmd.exe.lnk
 spc/spc.o
 spc/wla-dx/
 *.lnk
-texture.*.png
-texture_tile.*.png
+temp/texture.*.png
+temp/texture_tile.*.png
