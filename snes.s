@@ -700,17 +700,17 @@ snes_input_poll: ; copies NMI polled results
 	bne :+
 		jml reset_stub
 	:
-	; forward A/X to Y/B
+	; forward A/X to B/Y
 	lda z:gamepad_axlr
 	and #$80 ; A
 	beq :+
-		lsr ; remap to Y
+		;lsr ; remap to Y instead
 		tsb z:_gamepad
 	:
 	lda z:gamepad_axlr
 	and #$40 ; X
 	beq :+
-		asl ; remap to B
+		;asl ; remap to B instead
 		tsb z:_gamepad
 	:
 	; L/R enable/disable SNES graphics
