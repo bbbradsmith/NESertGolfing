@@ -4,7 +4,7 @@ A 2D golf game for the NES, directly inspired by [Desert Golfing](https://captai
 
 This is an alternate version of
 [NESert Golfing](https://github.com/bbbradsmith/NESertGolfing)
-for the SNES. **(It is a work in progress.)**
+for the SNES.
 
 Brad Smith, 2022.
 
