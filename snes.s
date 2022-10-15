@@ -715,14 +715,16 @@ snes_input_poll: ; copies NMI polled results
 	:
 	; L/R enable/disable SNES graphics
 	lda z:gamepad_axlr
-	and #$10 ; R
-	beq :+
+	and #$30
+	cmp #$10 ; R
+	bne :+
 		lda #1
 		sta z:snes_graphics
 	:
 	lda z:gamepad_axlr
-	and #$20 ; L
-	beq :+
+	and #$30
+	cmp #$20 ; L
+	bne :+
 		stz z:snes_graphics
 	:
 	; done
