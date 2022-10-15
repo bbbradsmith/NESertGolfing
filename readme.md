@@ -99,6 +99,9 @@ used as part of the build. See the file list below for details.
 
 ## Other Versions
 
+SNES:
+- https://github.com/bbbradsmith/NESertGolfing/tree/snes
+
 Famicom Disk System:
 - https://github.com/bbbradsmith/NESertGolfing/tree/fds
 
@@ -106,7 +109,7 @@ Tournament Edition:
 - In version 1.5 this was merged into the regular game. Select HELP from the menu, press and hold A, then press SELECT to switch to Tournament Edition. (A+B+SELECT+START will also reset the game.)
 
 History:
-- 1.5 - 2022-09-30 - Tournament Edition now in regular version via secret code. Soft reset button combo.
+- 1.5 - 2022-10-15 - SNES version. Tournament Edition now in regular version via secret code. Soft reset button combo.
 - 1.4 FDS - 2021-06-05 - Famicom Disk System version.
 - 1.4 TE - 2019-11-24 - Tournament Edition allows chosen random seed.
 - 1.4 - 2019-10-05 - Optimization.
